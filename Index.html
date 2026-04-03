@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feed Orders</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('farmer-form')">Farmer order form</button>
+      <button class="tab" onclick="showTab('admin-customers')">Manage customers</button>
+    </div>
+
+    <!-- FARMER FORM -->
+    <div class="page active" id="farmer-form">
+      <h2>Submit a feed order</h2>
+      <p class="subtitle">Select your name, pick your products, then assign loads to each day.</p>
+      <div class="steps">
+        <div class="step active" id="step1-ind">1. Your info</div>
+        <div class="step" id="step2-ind">2. Select products</div>
+        <div class="step" id="step3-ind">3. Loads &amp; days</div>
+      </div>
+
+      <div id="step1">
+        <div class="card">
+          <div class="form-row">
+            <label>Your name</label>
+            <select id="f-customer" onchange="customerSelected()">
+              <option value="">Loading customers...</option>
+            </select>
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label>Phone number</label>
+            <input type="tel" id="f-phone" placeholder="Auto-fills when you select your name" readonly />
+          </div>
+        </div>
+        <button class="btn-primary" onclick="goStep(2)">Next — choose products</button>
+      </div>
+
+      <div id="step2" style="display:none">
+        <div class="card">
+          <div class="form-row" style="margin-bottom:0">
+            <label>Select all products you need this order</label>
+            <div class="product-grid" id="product-chips"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="goStep(1)" style="flex:1;padding:9px">Back</button>
+          <button class="btn-primary" onclick="goStep(3)" style="flex:3">Next — set loads &amp; days</button>
+        </div>
+      </div>
+
+      <div id="step3" style="display:none">
+        <div id="product-blocks"></div>
+        <div class="card" style="margin-top:0.5rem">
+          <div class="form-row" style="margin-bottom:0">
+            <label>Notes (optional)</label>
+            <textarea id="f-notes" rows="2" placeholder="Any special instructions..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="goStep(2)" style="flex:1;padding:9px">Back</button>
+          <button class="btn-primary" id="submit-btn" onclick="submitOrder()" style="flex:3">Submit order</button>
+        </div>
+        <p class="note" id="form-msg"></p>
+      </div>
+    </div>
+
+    <!-- MANAGE CUSTOMERS -->
+    <div class="page" id="admin-customers">
+      <h2>Manage customers</h2>
+      <p class="subtitle">Add or remove customers from the farmer order form dropdown.</p>
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:0.75rem">Customer list</div>
+        <div id="cust-list"><span class="spinner"></span> Loading...</div>
+        <div class="add-cust-form">
+          <div>
+            <label style="font-size:12px;display:block;margin-bottom:3px">Name</label>
+            <input type="text" id="new-cust-name" placeholder="Farm or farmer name" />
+          </div>
+          <div>
+            <label style="font-size:12px;display:block;margin-bottom:3px">Phone</label>
+            <input type="tel" id="new-cust-phone" placeholder="605-555-0100" />
+          </div>
+          <button class="btn-sm" onclick="addCustomer()" style="height:36px;margin-top:auto">Add</button>
+        </div>
+        <p class="note" id="cust-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
