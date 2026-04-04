@@ -16,10 +16,10 @@
         <div class="admin-subtitle" id="week-label"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn-sm" onclick="prevWeek()">← Prev week</button>
+        <button class="btn-sm" onclick="prevWeek()">← Prev</button>
         <button class="btn-sm" onclick="todayWeek()">This week</button>
-        <button class="btn-sm" onclick="nextWeek()">Next week →</button>
-        <a href="index.html" class="btn-sm" style="text-decoration:none">+ New order</a>
+        <button class="btn-sm" onclick="nextWeek()">Next →</button>
+        <a href="index.html" class="btn-sm" style="text-decoration:none">+ Farmer order</a>
       </div>
     </div>
   </div>
@@ -28,78 +28,173 @@
 
     <div class="metric-grid" id="metrics"></div>
 
-    <div class="filter-bar">
-      <select id="filter-product" onchange="applyFilters()">
-        <option value="">All products</option>
-        <option>Wet distillers</option>
-        <option>Modified distillers</option>
-        <option>Dry distillers</option>
-        <option>Loosehulls</option>
-        <option>Soyhull pellets</option>
-        <option>Syrup</option>
-        <option>Corn screenings</option>
-      </select>
-      <select id="filter-status" onchange="applyFilters()">
-        <option value="">All statuses</option>
-        <option>Scheduled</option>
-        <option>Sent out</option>
-        <option>Delivered</option>
-        <option>Cancelled</option>
-      </select>
-      <select id="filter-customer" onchange="applyFilters()">
-        <option value="">All farmers</option>
-      </select>
-      <input type="text" id="filter-search" placeholder="Search farmer, plant, load #..." oninput="applyFilters()" style="flex:2;min-width:180px" />
+    <div class="admin-tabs">
+      <button class="admin-tab active" id="tab-loads" onclick="showAdminTab('loads')">All loads</button>
+      <button class="admin-tab" id="tab-entry" onclick="showAdminTab('entry')">+ Enter loads from plant</button>
+      <button class="admin-tab" id="tab-orders" onclick="showAdminTab('orders')">Farmer orders</button>
     </div>
 
-    <div class="table-wrap">
-      <table class="load-table" id="load-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Load #</th>
-            <th>Customer</th>
-            <th>Plant</th>
-            <th>Trucker</th>
-            <th>Loads</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="table-body">
-          <tr><td colspan="8" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
-        </tbody>
-      </table>
+    <!-- ALL LOADS TAB -->
+    <div id="panel-loads">
+      <div class="filter-bar">
+        <select id="filter-product" onchange="applyFilters()">
+          <option value="">All products</option>
+          <option>Wet distillers</option>
+          <option>Modified distillers</option>
+          <option>Dry distillers</option>
+          <option>Loosehulls</option>
+          <option>Soyhull pellets</option>
+          <option>Syrup</option>
+          <option>Corn screenings</option>
+        </select>
+        <select id="filter-status" onchange="applyFilters()">
+          <option value="">All statuses</option>
+          <option>Scheduled</option>
+          <option>Sent out</option>
+          <option>Delivered</option>
+          <option>Cancelled</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="Search farmer, plant, load #..." oninput="applyFilters()" style="flex:2;min-width:180px" />
+      </div>
+
+      <div class="table-wrap">
+        <table class="load-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Load #</th>
+              <th>Customer</th>
+              <th>Plant</th>
+              <th>Trucker</th>
+              <th>Loads</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="loads-tbody">
+            <tr><td colspan="9" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ENTER LOADS TAB -->
+    <div id="panel-entry" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem">Paste loads from plant</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
+          <div>
+            <label class="field-label">Plant</label>
+            <input type="text" id="entry-plant" placeholder="e.g. Sioux Center" style="width:100%" />
+          </div>
+          <div>
+            <label class="field-label">Product</label>
+            <select id="entry-product" style="width:100%">
+              <option value="">Select product...</option>
+              <option>Wet distillers</option>
+              <option>Modified distillers</option>
+              <option>Dry distillers</option>
+              <option>Loosehulls</option>
+              <option>Soyhull pellets</option>
+              <option>Syrup</option>
+              <option>Corn screenings</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Default date (optional)</label>
+            <input type="date" id="entry-date" style="width:100%" />
+          </div>
+        </div>
+
+        <div>
+          <label class="field-label">Load numbers — paste or type one per line</label>
+          <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;SC136-0574-003&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px"></textarea>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:0.75rem;gap:8px">
+          <button class="btn-sm" onclick="clearEntryForm()">Clear</button>
+          <button class="btn-primary" onclick="importLoads()" style="width:auto;margin-top:0;padding:8px 24px">Import loads</button>
+        </div>
+        <p id="entry-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+
+      <!-- Editable load table -->
+      <div id="entry-table-wrap" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <div style="font-size:14px;font-weight:500;color:var(--color-text-primary)" id="entry-table-title">Imported loads</div>
+          <button class="btn-primary" onclick="saveAllLoads()" style="width:auto;margin-top:0;padding:8px 20px" id="save-all-btn">Save all to database</button>
+        </div>
+        <div class="table-wrap">
+          <table class="load-table">
+            <thead>
+              <tr>
+                <th>Load #</th>
+                <th>Plant</th>
+                <th>Product</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="entry-tbody"></tbody>
+          </table>
+        </div>
+        <p id="save-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+    </div>
+
+    <!-- FARMER ORDERS TAB -->
+    <div id="panel-orders" style="display:none">
+      <div class="table-wrap">
+        <table class="load-table">
+          <thead>
+            <tr>
+              <th>Submitted</th>
+              <th>Customer</th>
+              <th>Product</th>
+              <th>Total loads</th>
+              <th>Delivery window</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr><td colspan="6" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
   </div>
 
+  <!-- Edit load modal -->
   <div class="modal-backdrop" id="modal-backdrop" onclick="closeModal()" style="display:none"></div>
   <div class="modal" id="edit-modal" style="display:none">
     <div class="modal-title">Edit load</div>
     <div class="modal-subtitle" id="modal-subtitle"></div>
     <div style="margin-top:1rem">
-      <label class="modal-label">Load number</label>
-      <input type="text" id="m-loadnum" placeholder="e.g. SC136-0574-001" style="width:100%" />
+      <label class="field-label">Load number</label>
+      <input type="text" id="m-loadnum" style="width:100%" />
     </div>
     <div style="margin-top:0.75rem">
-      <label class="modal-label">Plant</label>
-      <input type="text" id="m-plant" placeholder="e.g. Sioux Center, Goldfield" style="width:100%" />
+      <label class="field-label">Plant</label>
+      <input type="text" id="m-plant" style="width:100%" />
     </div>
     <div style="margin-top:0.75rem">
-      <label class="modal-label">Trucker</label>
-      <select id="m-trucker-select" onchange="truckerSelectChange()" style="width:100%;margin-bottom:6px">
-        <option value="">Choose trucker...</option>
-        <option>Midwest Hauling</option>
-        <option>Big Sioux Transport</option>
-        <option>Prairie Freight</option>
-        <option>Dakota Feed Haulers</option>
-        <option>Other (type below)</option>
-      </select>
-      <input type="text" id="m-trucker-custom" placeholder="Type trucker name" style="width:100%;display:none" />
+      <label class="field-label">Date</label>
+      <input type="date" id="m-date" style="width:100%" />
     </div>
     <div style="margin-top:0.75rem">
-      <label class="modal-label">Status</label>
+      <label class="field-label">Customer</label>
+      <input type="text" id="m-customer" placeholder="Type farmer name" style="width:100%" />
+    </div>
+    <div style="margin-top:0.75rem">
+      <label class="field-label">Trucker <span style="font-size:11px;color:var(--color-text-secondary)">(typing this marks load as Sent out)</span></label>
+      <input type="text" id="m-trucker" placeholder="Type trucker name" style="width:100%" />
+    </div>
+    <div style="margin-top:0.75rem">
+      <label class="field-label">Status</label>
       <select id="m-status" style="width:100%">
         <option>Scheduled</option>
         <option>Sent out</option>
@@ -111,7 +206,7 @@
       <button class="btn-sm" onclick="closeModal()" style="flex:1;padding:9px">Cancel</button>
       <button class="btn-primary" onclick="saveEdit()" style="flex:2;margin-top:0">Save</button>
     </div>
-    <p style="font-size:12px;margin-top:0.5rem;color:green" id="modal-msg"></p>
+    <p style="font-size:12px;margin-top:0.5rem" id="modal-msg"></p>
   </div>
 
   <script src="admin.js"></script>
