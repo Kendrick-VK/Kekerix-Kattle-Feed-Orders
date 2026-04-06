@@ -12,7 +12,7 @@ const sb = (path, opts = {}) => fetch(SUPABASE_URL + '/rest/v1/' + path, {
   ...opts
 }).then(r => r.json());
 
-const PRODUCTS = ['Wet distillers','Modified distillers','Dry distillers','Loosehulls','Soyhull pellets','Syrup','Corn screenings'];
+const PRODUCTS = ['Wet distillers','Modified distillers','Dry distillers','Loosehulls','Soyhull pellets','Syrup','Corn screenings','Gluten'];
 
 const COL_MAP = {
   notes:0, delivery_date:1, product:2, load_number:3, customer_name:4,
