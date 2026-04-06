@@ -48,34 +48,37 @@
           <option>Syrup</option>
           <option>Corn screenings</option>
         </select>
-        <select id="filter-status" onchange="applyFilters()">
-          <option value="">All statuses</option>
-          <option>Scheduled</option>
-          <option>Sent out</option>
-          <option>Delivered</option>
-          <option>Cancelled</option>
-        </select>
         <input type="text" id="filter-search" placeholder="Search farmer, plant, load #..." oninput="applyFilters()" style="flex:2;min-width:180px" />
       </div>
-      <div class="table-wrap">
-        <table class="load-table">
+      <div class="sheet-wrap">
+        <table class="sheet-table" id="sheet-table">
           <thead>
             <tr>
-              <th>Date</th><th>Product</th><th>Load #</th><th>Customer</th>
-              <th>Plant</th><th>Trucker</th><th>Loads</th><th>Status</th><th></th>
+              <th style="width:95px">Date</th>
+              <th style="width:130px">Product</th>
+              <th style="width:115px">Load #</th>
+              <th style="width:140px">Customer</th>
+              <th style="width:115px">Plant</th>
+              <th style="width:130px">Trucker</th>
+              <th style="width:50px">Loads</th>
+              <th style="width:65px">Tons</th>
+              <th style="width:75px">Markup</th>
+              <th style="width:90px">Commission</th>
+              <th style="width:36px"></th>
             </tr>
           </thead>
-          <tbody id="loads-tbody">
-            <tr><td colspan="9" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+          <tbody id="sheet-body">
+            <tr><td colspan="11" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
       </div>
+      <div class="sheet-hint">Click any cell to edit inline. Tab moves right, Enter confirms. Changes save automatically.</div>
     </div>
 
     <!-- ENTER LOADS TAB -->
     <div id="panel-entry" style="display:none">
       <div class="card">
-        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem">Paste loads from plant</div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Paste loads from plant</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
           <div>
             <label class="field-label">Plant</label>
@@ -111,11 +114,11 @@
       </div>
       <div id="entry-table-wrap" style="display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
-          <div style="font-size:14px;font-weight:500;color:var(--color-text-primary)" id="entry-table-title">Imported loads</div>
+          <div style="font-size:14px;font-weight:500;color:#1a1a1a" id="entry-table-title">Imported loads</div>
           <button class="btn-primary" onclick="saveAllLoads()" style="width:auto;margin-top:0;padding:8px 20px" id="save-all-btn">Save all to database</button>
         </div>
-        <div class="table-wrap">
-          <table class="load-table">
+        <div class="sheet-wrap">
+          <table class="sheet-table">
             <thead>
               <tr><th>Load #</th><th>Plant</th><th>Product</th><th>Date</th><th>Customer</th><th></th></tr>
             </thead>
@@ -128,8 +131,8 @@
 
     <!-- FARMER ORDERS TAB -->
     <div id="panel-orders" style="display:none">
-      <div class="table-wrap">
-        <table class="load-table">
+      <div class="sheet-wrap">
+        <table class="sheet-table">
           <thead>
             <tr><th>Submitted</th><th>Customer</th><th>Product</th><th>Total loads</th><th>Delivery window</th><th>Notes</th></tr>
           </thead>
@@ -143,18 +146,16 @@
     <!-- CUSTOMERS TAB -->
     <div id="panel-customers" style="display:none">
       <div class="card">
-        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem">Customer list</div>
-        <div class="table-wrap" style="margin-bottom:1rem">
-          <table class="load-table">
-            <thead>
-              <tr><th>Name</th><th>Phone</th><th></th></tr>
-            </thead>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Customer list</div>
+        <div class="sheet-wrap" style="margin-bottom:1rem">
+          <table class="sheet-table">
+            <thead><tr><th>Name</th><th>Phone</th><th></th></tr></thead>
             <tbody id="customers-tbody">
               <tr><td colspan="3" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
             </tbody>
           </table>
         </div>
-        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:0.75rem">Add new customer</div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:0.75rem">Add new customer</div>
         <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
           <div>
             <label class="field-label">Name</label>
@@ -172,49 +173,8 @@
 
   </div>
 
-  <!-- Edit load modal -->
   <div class="modal-backdrop" id="modal-backdrop" onclick="closeModal()" style="display:none"></div>
-  <div class="modal" id="edit-modal" style="display:none">
-    <div class="modal-title">Edit load</div>
-    <div class="modal-subtitle" id="modal-subtitle"></div>
-    <div style="margin-top:1rem">
-      <label class="field-label">Load number</label>
-      <input type="text" id="m-loadnum" style="width:100%" />
-    </div>
-    <div style="margin-top:0.75rem">
-      <label class="field-label">Plant</label>
-      <input type="text" id="m-plant" style="width:100%" />
-    </div>
-    <div style="margin-top:0.75rem">
-      <label class="field-label">Date</label>
-      <input type="date" id="m-date" style="width:100%" />
-    </div>
-    <div style="margin-top:0.75rem">
-      <label class="field-label">Customer</label>
-      <input type="text" id="m-customer" placeholder="Type farmer name" style="width:100%" />
-    </div>
-    <div style="margin-top:0.75rem">
-      <label class="field-label">Trucker <span style="font-size:11px;color:var(--color-text-secondary)">(typing this marks load as Sent out)</span></label>
-      <input type="text" id="m-trucker" placeholder="Type trucker name" style="width:100%" />
-    </div>
-    <div style="margin-top:0.75rem">
-      <label class="field-label">Status</label>
-      <select id="m-status" style="width:100%">
-        <option>Scheduled</option>
-        <option>Sent out</option>
-        <option>Delivered</option>
-        <option>Cancelled</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:1.25rem">
-      <button class="btn-sm" onclick="closeModal()" style="flex:1;padding:9px">Cancel</button>
-      <button class="btn-primary" onclick="saveEdit()" style="flex:2;margin-top:0">Save</button>
-    </div>
-    <p style="font-size:12px;margin-top:0.5rem" id="modal-msg"></p>
-  </div>
-
-  <!-- Edit customer modal -->
-  <div class="modal" id="edit-cust-modal" style="display:none;z-index:202">
+  <div class="modal" id="edit-cust-modal" style="display:none">
     <div class="modal-title">Edit customer</div>
     <div style="margin-top:1rem">
       <label class="field-label">Name</label>
@@ -225,7 +185,7 @@
       <input type="tel" id="ec-phone" style="width:100%" />
     </div>
     <div style="display:flex;gap:8px;margin-top:1.25rem">
-      <button class="btn-sm" onclick="closeCustomerModal()" style="flex:1;padding:9px">Cancel</button>
+      <button class="btn-sm" onclick="closeModal()" style="flex:1;padding:9px">Cancel</button>
       <button class="btn-primary" onclick="saveCustomer()" style="flex:2;margin-top:0">Save</button>
     </div>
     <p style="font-size:12px;margin-top:0.5rem" id="ec-msg"></p>
