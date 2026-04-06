@@ -244,7 +244,10 @@ async function commitCell(save) {
 
     // When farmer name is typed, decrement their order by 1 load
     if (field==='customer_name' && newVal && line.delivery_date && line.product) {
+      console.log('Calling decrement:', newVal, line.product, line.delivery_date);
       decrementFarmerOrder(newVal, line.product, line.delivery_date);
+    } else if (field==='customer_name') {
+      console.log('Decrement skipped — missing date or product:', {name:newVal, date:line.delivery_date, product:line.product});
     }
 
     try {
