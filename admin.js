@@ -33,6 +33,7 @@ let weekOffset = 0;
 let activeCell = null;
 let editingCustomerId = null;
 let importedRows = [];
+let dragFillStart = null;
 
 async function init() {
   renderWeekLabel();
@@ -45,6 +46,7 @@ async function init() {
 async function loadOrderLines() {
   try {
     const lines = await sb('order_lines?select=*,orders(id,customer_id,notes,submitted_at,customers(id,name,phone))&order=delivery_date.asc,load_number.asc');
+    // Only show plant loads (have load_number) or unmatched lines — hide fulfilled farmer requests
     allLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled') : [];
     filteredLines = [...allLines];
   } catch(e) { console.error(e); }
@@ -52,8 +54,9 @@ async function loadOrderLines() {
 
 async function loadOrders() {
   try {
-    const orders = await sb('orders?select=*,customers(name,phone),order_lines(product,total_loads,delivery_date,loads_on_date,status)&order=submitted_at.desc');
-    allOrders = Array.isArray(orders) ? orders : [];
+    // Load farmer order requests — lines submitted via the farmer form (no load_number, not fulfilled)
+    const lines = await sb('order_lines?select=*,orders(id,customer_id,submitted_at,customers(id,name,phone))&load_number=is.null&status=neq.Fulfilled&order=delivery_date.asc');
+    allOrders = Array.isArray(lines) ? lines : [];
   } catch(e) { console.error(e); }
 }
 
@@ -120,7 +123,6 @@ function renderMetrics() {
   const week = allLines.filter(l => l.delivery_date>=ws && l.delivery_date<=we);
   const total = week.length;
   const totalCommission = week.reduce((a,l) => a+(parseFloat(l.commission)||0), 0);
-
   document.getElementById('metrics').innerHTML = `
     <div class="metric"><div class="metric-label">Total loads this week</div><div class="metric-value">${total}</div></div>
     <div class="metric"><div class="metric-label">Commission this week</div><div class="metric-value" style="color:#3B6D11">$${totalCommission.toFixed(2)}</div></div>
@@ -181,14 +183,12 @@ function renderSheet() {
 // ── Single-click inline editing ───────────────────────
 function startEdit(lineId, field) {
   if (activeCell) commitCell(false);
-
   const tr = document.querySelector(`tr[data-id="${lineId}"]`);
   if (!tr) return;
   const colIdx = COL_MAP[field];
   const td = tr.children[colIdx];
   if (!td) return;
   td.classList.add('cell-active');
-
   const line = allLines.find(l => l.id===lineId);
   const currentVal = line ? (line[field]!=null ? line[field] : '') : '';
   const type = FIELD_TYPE[field];
@@ -197,10 +197,7 @@ function startEdit(lineId, field) {
   if (type==='select-product') {
     input = document.createElement('select');
     input.className = 'cell-input';
-    PRODUCTS.forEach(p => {
-      const o=document.createElement('option');
-      o.textContent=p; if(p===currentVal) o.selected=true; input.appendChild(o);
-    });
+    PRODUCTS.forEach(p => { const o=document.createElement('option'); o.textContent=p; if(p===currentVal) o.selected=true; input.appendChild(o); });
   } else {
     input = document.createElement('input');
     input.className = 'cell-input';
@@ -210,7 +207,6 @@ function startEdit(lineId, field) {
     input.value = currentVal;
   }
 
-  // Single click focus — no double click needed
   input.onblur = () => commitCell(true);
   input.onkeydown = e => {
     if (e.key==='Enter') { e.preventDefault(); commitCell(true); }
@@ -218,11 +214,9 @@ function startEdit(lineId, field) {
     if (e.key==='Escape') { td.classList.remove('cell-active'); renderSheet(); activeCell=null; }
   };
 
-  td.innerHTML='';
-  td.appendChild(input);
+  td.innerHTML=''; td.appendChild(input);
   input.focus();
   if (type!=='select-product'&&type!=='date') input.select();
-
   activeCell = { td, lineId, field, type, input, oldVal: currentVal };
 }
 
@@ -242,15 +236,17 @@ async function commitCell(save) {
 
   const strNew = newVal!=null?String(newVal):'';
   const strOld = oldVal!=null?String(oldVal):'';
-
   line[field] = newVal;
 
   if (save && strNew!==strOld) {
     const updatePayload = { [field]: newVal };
     if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
+
+    // When farmer name is typed, decrement their order by 1 load
     if (field==='customer_name' && newVal && line.delivery_date && line.product) {
-      autoFulfillOrder(newVal, line.product, line.delivery_date);
+      decrementFarmerOrder(newVal, line.product, line.delivery_date);
     }
+
     try {
       await sb('order_lines?id=eq.'+lineId, {
         method:'PATCH', headers:{'Prefer':'return=minimal'},
@@ -265,24 +261,55 @@ async function commitCell(save) {
 
 function moveNext(lineId, currentField) {
   const idx = FIELD_ORDER.indexOf(currentField);
-  if (idx < FIELD_ORDER.length-1) {
-    setTimeout(() => startEdit(lineId, FIELD_ORDER[idx+1]), 30);
-  }
+  if (idx < FIELD_ORDER.length-1) setTimeout(() => startEdit(lineId, FIELD_ORDER[idx+1]), 30);
 }
 
-// ── Auto-fulfill ──────────────────────────────────────
-async function autoFulfillOrder(customerName, product, deliveryDate) {
+// ── Decrement farmer order 1 load at a time ───────────
+async function decrementFarmerOrder(customerName, product, deliveryDate) {
   if (!customerName||!product||!deliveryDate) return;
   try {
-    const matchedCustomer = allCustomers.find(c => c.name.toLowerCase().trim()===customerName.toLowerCase().trim());
-    if (!matchedCustomer) return;
-    const matches = await sb(`order_lines?select=id,order_id,product,delivery_date,status,load_number,orders(customer_id)&product=eq.${encodeURIComponent(product)}&delivery_date=eq.${deliveryDate}&status=neq.Fulfilled`);
-    if (!Array.isArray(matches)||!matches.length) return;
-    const toFulfill = matches.filter(l => l.orders&&l.orders.customer_id===matchedCustomer.id&&!l.load_number);
-    if (!toFulfill.length) return;
-    await sb('order_lines?id=eq.'+toFulfill[0].id, { method:'PATCH', headers:{'Prefer':'return=minimal'}, body: JSON.stringify({status:'Fulfilled'}) });
+    // Find this customer in allCustomers
+    const customer = allCustomers.find(c =>
+      c.name.toLowerCase().trim() === customerName.toLowerCase().trim()
+    );
+    if (!customer) return;
+
+    // Find their pending order line matching product + date
+    const match = allOrders.find(l =>
+      l.orders &&
+      l.orders.customers &&
+      l.orders.customers.id === customer.id &&
+      l.product === product &&
+      l.delivery_date === deliveryDate &&
+      l.status !== 'Fulfilled'
+    );
+
+    if (!match) return;
+
+    const remaining = (match.loads_on_date || 1) - 1;
+
+    if (remaining <= 0) {
+      // All loads filled — mark as Fulfilled so it disappears
+      await sb('order_lines?id=eq.'+match.id, {
+        method:'PATCH', headers:{'Prefer':'return=minimal'},
+        body: JSON.stringify({ status: 'Fulfilled', loads_on_date: 0 })
+      });
+    } else {
+      // Still has remaining loads — decrement by 1
+      await sb('order_lines?id=eq.'+match.id, {
+        method:'PATCH', headers:{'Prefer':'return=minimal'},
+        body: JSON.stringify({ loads_on_date: remaining })
+      });
+      // Update local state
+      match.loads_on_date = remaining;
+    }
+
+    // Reload orders to reflect the change in the Farmer Orders tab
     await loadOrders();
-  } catch(e) { console.error('Auto-fulfill error:', e); }
+    renderOrdersTable();
+  } catch(e) {
+    console.error('Decrement error:', e);
+  }
 }
 
 // ── Delete ────────────────────────────────────────────
@@ -296,6 +323,17 @@ async function deleteLine(lineId) {
 }
 
 // ── Import loads ──────────────────────────────────────
+function generateSequence() {
+  const first = document.getElementById('gen-first').value.trim();
+  const count = parseInt(document.getElementById('gen-count').value) || 0;
+  const msg = document.getElementById('entry-msg');
+  if (!first) { msg.style.color='red'; msg.textContent='Enter a starting load number.'; return; }
+  if (!count || count < 1) { msg.style.color='red'; msg.textContent='Enter how many loads to generate.'; return; }
+  const seq = [first, ...incrementSequence(first, count - 1)];
+  document.getElementById('entry-loads').value = seq.join('\n');
+  msg.style.color='green'; msg.textContent = seq.length + ' load numbers generated — click Import loads.';
+}
+
 function importLoads() {
   const plant = document.getElementById('entry-plant').value.trim();
   const product = document.getElementById('entry-product').value;
@@ -317,8 +355,11 @@ function renderEntryTable() {
   if (!tbody) return;
   if (!importedRows.length) { tbody.innerHTML='<tr><td colspan="6" class="table-empty">No loads.</td></tr>'; return; }
   tbody.innerHTML = importedRows.map((r,i) => `
-    <tr>
-      <td style="padding:4px 6px"><input class="entry-input" type="text" value="${r.load_number}" onchange="updateImportRow(${i},'load_number',this.value)" /></td>
+    <tr data-entry-idx="${i}">
+      <td style="padding:4px 6px;position:relative">
+        <input class="entry-input" type="text" id="entry-loadnum-${i}" value="${r.load_number}" onchange="updateImportRow(${i},'load_number',this.value)" />
+        <div class="drag-handle" title="Drag to fill sequence" onmousedown="startDragFill(event,${i})" ontouchstart="startDragFill(event,${i})">&#9656;</div>
+      </td>
       <td style="padding:4px 6px"><input class="entry-input" type="text" value="${r.plant}" placeholder="Plant" onchange="updateImportRow(${i},'plant',this.value)" /></td>
       <td style="padding:4px 6px">
         <select class="entry-input" onchange="updateImportRow(${i},'product',this.value)">
@@ -329,6 +370,64 @@ function renderEntryTable() {
       <td style="padding:4px 6px"><input class="entry-input" type="text" value="${r.customer_name}" placeholder="Farmer (optional)" onchange="updateImportRow(${i},'customer_name',this.value)" /></td>
       <td style="padding:4px 6px"><button class="del-btn" onclick="removeImportRow(${i})">✕</button></td>
     </tr>`).join('');
+}
+
+// ── Drag-to-fill ──────────────────────────────────────
+function startDragFill(e, fromIdx) {
+  e.preventDefault();
+  dragFillStart = fromIdx;
+  document.addEventListener('mousemove', onDragFillMove);
+  document.addEventListener('mouseup', onDragFillEnd);
+  document.addEventListener('touchmove', onDragFillMove);
+  document.addEventListener('touchend', onDragFillEnd);
+}
+
+function onDragFillMove(e) {
+  if (dragFillStart === null) return;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const rows = document.querySelectorAll('#entry-tbody tr[data-entry-idx]');
+  rows.forEach(tr => tr.classList.remove('drag-fill-highlight'));
+  rows.forEach(tr => {
+    const idx = parseInt(tr.dataset.entryIdx);
+    const rect = tr.getBoundingClientRect();
+    if (idx >= dragFillStart && clientY >= rect.top) tr.classList.add('drag-fill-highlight');
+  });
+}
+
+function onDragFillEnd(e) {
+  if (dragFillStart === null) return;
+  document.removeEventListener('mousemove', onDragFillMove);
+  document.removeEventListener('mouseup', onDragFillEnd);
+  document.removeEventListener('touchmove', onDragFillMove);
+  document.removeEventListener('touchend', onDragFillEnd);
+  const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+  const rows = document.querySelectorAll('#entry-tbody tr[data-entry-idx]');
+  let toIdx = dragFillStart;
+  rows.forEach(tr => {
+    const idx = parseInt(tr.dataset.entryIdx);
+    const rect = tr.getBoundingClientRect();
+    if (clientY >= rect.top) toIdx = Math.max(toIdx, idx);
+    tr.classList.remove('drag-fill-highlight');
+  });
+  if (toIdx > dragFillStart) {
+    const baseVal = importedRows[dragFillStart].load_number;
+    const generated = incrementSequence(baseVal, toIdx - dragFillStart);
+    for (let i = dragFillStart+1; i <= toIdx; i++) {
+      if (importedRows[i]) importedRows[i].load_number = generated[i-dragFillStart-1];
+    }
+    renderEntryTable();
+  }
+  dragFillStart = null;
+}
+
+function incrementSequence(base, count) {
+  const match = base.match(/^(.*?)(\d+)([^0-9]*)$/);
+  if (!match) return Array(count).fill(base);
+  const prefix=match[1], numStr=match[2], suffix=match[3];
+  const num=parseInt(numStr), pad=numStr.length;
+  const results=[];
+  for (let i=1;i<=count;i++) results.push(prefix+String(num+i).padStart(pad,'0')+suffix);
+  return results;
 }
 
 function updateImportRow(i,field,value) { importedRows[i][field]=value; }
@@ -345,10 +444,19 @@ async function saveAllLoads() {
   if (invalid.length) { msg.style.color='red'; msg.textContent='Every load needs a load number and date.'; return; }
   btn.disabled=true; btn.textContent='Saving...';
   try {
-    const payload=importedRows.map(r=>({load_number:r.load_number,plant:r.plant||null,product:r.product,delivery_date:r.delivery_date,customer_name:r.customer_name||null,loads_on_date:1,total_loads:1,status:'Scheduled'}));
+    const payload=importedRows.map(r=>({
+      load_number:r.load_number, plant:r.plant||null, product:r.product,
+      delivery_date:r.delivery_date, customer_name:r.customer_name||null,
+      loads_on_date:1, total_loads:1, status:'Scheduled'
+    }));
     const result=await sb('order_lines',{method:'POST',body:JSON.stringify(payload)});
     if (result&&result.code) throw new Error(result.message||'Save failed');
-    for (const r of importedRows) { if (r.customer_name&&r.product&&r.delivery_date) await autoFulfillOrder(r.customer_name,r.product,r.delivery_date); }
+    // Decrement farmer orders for any pre-assigned loads
+    for (const r of importedRows) {
+      if (r.customer_name&&r.product&&r.delivery_date) {
+        await decrementFarmerOrder(r.customer_name, r.product, r.delivery_date);
+      }
+    }
     msg.style.color='green'; msg.textContent=importedRows.length+' loads saved!';
     importedRows=[]; renderEntryTable();
     document.getElementById('entry-table-wrap').style.display='none';
@@ -369,22 +477,51 @@ function clearEntryForm() {
   document.getElementById('entry-table-wrap').style.display='none';
 }
 
-// ── Farmer orders ─────────────────────────────────────
+// ── Farmer orders tab ─────────────────────────────────
 function renderOrdersTable() {
   const tbody=document.getElementById('orders-tbody');
   if (!tbody) return;
-  const active=allOrders.filter(o=>(o.order_lines||[]).some(l=>l.status!=='Fulfilled'));
-  if (!active.length) { tbody.innerHTML='<tr><td colspan="6" class="table-empty">No outstanding farmer orders.</td></tr>'; return; }
-  tbody.innerHTML=active.map(o=>{
-    const farmer=o.customers?o.customers.name:'—';
-    const lines=(o.order_lines||[]).filter(l=>l.status!=='Fulfilled');
-    const products=[...new Set(lines.map(l=>l.product))].join(', ');
-    const totalLoads=lines.reduce((a,l)=>a+(l.loads_on_date||0),0);
-    const dates=lines.map(l=>l.delivery_date).sort();
-    const win=dates.length?(dates[0]===dates[dates.length-1]?formatDate(dates[0]):formatDate(dates[0])+' – '+formatDate(dates[dates.length-1])):'—';
-    const submitted=o.submitted_at?new Date(o.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—';
-    return `<tr><td style="padding:9px 12px">${submitted}</td><td style="padding:9px 12px">${farmer}</td><td style="padding:9px 12px">${products||'—'}</td><td style="padding:9px 12px">${totalLoads}</td><td style="padding:9px 12px">${win}</td><td style="padding:9px 12px">${o.notes||'<span style="color:#aaa">—</span>'}</td></tr>`;
+
+  // Group by customer for a cleaner view
+  if (!allOrders.length) {
+    tbody.innerHTML='<tr><td colspan="5" class="table-empty">No outstanding farmer orders.</td></tr>';
+    return;
+  }
+
+  // Sort by date then customer
+  const sorted = [...allOrders].sort((a,b) => {
+    if (a.delivery_date < b.delivery_date) return -1;
+    if (a.delivery_date > b.delivery_date) return 1;
+    const aName = a.orders&&a.orders.customers?a.orders.customers.name:'';
+    const bName = b.orders&&b.orders.customers?b.orders.customers.name:'';
+    return aName.localeCompare(bName);
+  });
+
+  tbody.innerHTML = sorted.map(l => {
+    const farmer = l.orders&&l.orders.customers ? l.orders.customers.name : '—';
+    const loads = l.loads_on_date || 1;
+    return `
+      <tr>
+        <td style="padding:9px 12px">${formatDate(l.delivery_date)}</td>
+        <td style="padding:9px 12px;font-weight:500">${farmer}</td>
+        <td style="padding:9px 12px">${l.product}</td>
+        <td style="padding:9px 12px">${loads} load${loads!==1?'s':''} needed</td>
+        <td style="padding:9px 12px">
+          <button class="del-btn" onclick="dismissOrder(${l.id})">Dismiss</button>
+        </td>
+      </tr>`;
   }).join('');
+}
+
+async function dismissOrder(id) {
+  try {
+    await sb('order_lines?id=eq.'+id, {
+      method:'PATCH', headers:{'Prefer':'return=minimal'},
+      body: JSON.stringify({status:'Fulfilled'})
+    });
+    allOrders = allOrders.filter(l => l.id!==id);
+    renderOrdersTable();
+  } catch(e) { alert('Error dismissing order.'); }
 }
 
 // ── Customers ─────────────────────────────────────────
