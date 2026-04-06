@@ -106,7 +106,15 @@
           </div>
         </div>
         <div>
-          <label class="field-label">Load numbers — paste or type one per line</label>
+          <label class="field-label">Quick generate — type first load # and count</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input type="text" id="gen-first" placeholder="e.g. SC136-0574-001" style="flex:2" />
+            <input type="number" id="gen-count" placeholder="# of loads" min="1" style="flex:1;max-width:110px" />
+            <button class="btn-sm" onclick="generateSequence()" style="white-space:nowrap">Generate</button>
+          </div>
+        </div>
+        <div style="margin-top:1rem">
+          <label class="field-label">Or paste load numbers — one per line</label>
           <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;SC136-0574-003&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px"></textarea>
         </div>
         <div style="display:flex;justify-content:flex-end;margin-top:0.75rem;gap:8px">
@@ -137,10 +145,10 @@
       <div class="sheet-wrap">
         <table class="sheet-table">
           <thead>
-            <tr><th>Submitted</th><th>Customer</th><th>Product</th><th>Total loads</th><th>Delivery window</th><th>Notes</th></tr>
+            <tr><th>Date</th><th>Farmer</th><th>Product</th><th>Loads needed</th><th></th></tr>
           </thead>
           <tbody id="orders-tbody">
-            <tr><td colspan="6" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            <tr><td colspan="5" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
       </div>
