@@ -11,8 +11,8 @@ body { background: #f5f5f3; }
 .metric-label { font-size: 12px; color: #666; margin-bottom: 4px; }
 .metric-value { font-size: 24px; font-weight: 500; color: #1a1a1a; }
 
-.admin-tabs { display: flex; gap: 4px; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e5e5; }
-.admin-tab { padding: 8px 18px; font-size: 13px; color: #666; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; }
+.admin-tabs { display: flex; gap: 4px; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e5e5; flex-wrap: wrap; }
+.admin-tab { padding: 8px 18px; font-size: 13px; color: #666; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; white-space: nowrap; }
 .admin-tab:hover { color: #1a1a1a; }
 .admin-tab.active { color: #185FA5; border-bottom-color: #378ADD; font-weight: 500; }
 
@@ -39,7 +39,6 @@ body { background: #f5f5f3; }
 .badge-sent_out { background: #FAEEDA; color: #854F0B; }
 .badge-delivered { background: #EAF3DE; color: #3B6D11; }
 .badge-cancelled { background: #f0f0ee; color: #888; }
-.badge-unassigned { background: #fff3e0; color: #854F0B; font-style: italic; }
 
 .row-scheduled { border-left: 3px solid #378ADD; }
 .row-sent_out { border-left: 3px solid #EF9F27; }
@@ -50,6 +49,7 @@ body { background: #f5f5f3; }
 .edit-btn { font-size: 11px; padding: 3px 10px; border-radius: 6px; border: 1px solid #ddd; background: transparent; cursor: pointer; color: #666; white-space: nowrap; }
 .edit-btn:hover { border-color: #378ADD; color: #185FA5; }
 .del-btn { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #f0c0c0; background: transparent; cursor: pointer; color: #A32D2D; }
+.del-btn:hover { background: #fff0f0; }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 200; }
 .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #fff; border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 400px; z-index: 201; box-shadow: 0 4px 24px rgba(0,0,0,0.12); max-height: 90vh; overflow-y: auto; }
@@ -58,5 +58,5 @@ body { background: #f5f5f3; }
 
 @media (max-width: 600px) {
   .metric-grid { grid-template-columns: 1fr 1fr; }
-  #panel-entry .card > div:first-of-type { grid-template-columns: 1fr !important; }
+  #panel-entry .card > div:nth-child(2) { grid-template-columns: 1fr !important; }
 }
