@@ -295,18 +295,17 @@ async function decrementFarmerOrder(customerName, product, deliveryDate) {
     const remaining = (match.loads_on_date || 1) - 1;
 
     if (remaining <= 0) {
-      // All loads filled — mark as Fulfilled so it disappears
-      await sb('order_lines?id=eq.'+match.id, {
-        method:'PATCH', headers:{'Prefer':'return=minimal'},
+      await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=eq.' + match.id, {
+        method: 'PATCH',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ status: 'Fulfilled', loads_on_date: 0 })
       });
     } else {
-      // Still has remaining loads — decrement by 1
-      await sb('order_lines?id=eq.'+match.id, {
-        method:'PATCH', headers:{'Prefer':'return=minimal'},
+      await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=eq.' + match.id, {
+        method: 'PATCH',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ loads_on_date: remaining })
       });
-      // Update local state
       match.loads_on_date = remaining;
     }
 
@@ -322,10 +321,19 @@ async function decrementFarmerOrder(customerName, product, deliveryDate) {
 async function deleteLine(lineId) {
   if (!confirm('Delete this load?')) return;
   try {
-    await sb('order_lines?id=eq.'+lineId, { method:'DELETE', headers:{'Prefer':'return=minimal'} });
-    allLines = allLines.filter(l => l.id!==lineId);
+    const res = await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=eq.' + lineId, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      }
+    });
+    if (!res.ok) throw new Error('Delete failed: ' + res.status);
+    allLines = allLines.filter(l => l.id !== lineId);
     applyFilters();
-  } catch(e) { alert('Error deleting.'); }
+  } catch(e) { alert('Error deleting: ' + e.message); }
 }
 
 // ── Import loads ──────────────────────────────────────
