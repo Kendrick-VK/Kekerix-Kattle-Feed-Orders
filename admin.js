@@ -242,12 +242,15 @@ async function commitCell(save) {
     const updatePayload = { [field]: newVal };
     if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
 
-    // When farmer name is typed, decrement their order by 1 load
-    if (field==='customer_name' && newVal && line.delivery_date && line.product) {
-      console.log('Calling decrement:', newVal, line.product, line.delivery_date);
-      decrementFarmerOrder(newVal, line.product, line.delivery_date);
-    } else if (field==='customer_name') {
-      console.log('Decrement skipped — missing date or product:', {name:newVal, date:line.delivery_date, product:line.product});
+    // Try to decrement farmer order whenever customer_name, product, or delivery_date changes
+    // as long as all three are now filled in
+    const updatedLine = { ...line, [field]: newVal };
+    const farmer = updatedLine.customer_name;
+    const product = updatedLine.product;
+    const date = updatedLine.delivery_date;
+    if ((field==='customer_name' || field==='product' || field==='delivery_date') && farmer && product && date) {
+      console.log('Calling decrement:', farmer, product, date);
+      decrementFarmerOrder(farmer, product, date);
     }
 
     try {
