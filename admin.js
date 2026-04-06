@@ -14,14 +14,13 @@ const sb = (path, opts = {}) => fetch(SUPABASE_URL + '/rest/v1/' + path, {
 
 const PRODUCTS = ['Wet distillers','Modified distillers','Dry distillers','Loosehulls','Soyhull pellets','Syrup','Corn screenings'];
 
-// field -> column index in the sheet
 const COL_MAP = {
-  delivery_date:0, product:1, load_number:2, customer_name:3,
-  plant:4, hauler:5, loads_on_date:6, tons:7, markup:8, commission:9
+  notes:0, delivery_date:1, product:2, load_number:3, customer_name:4,
+  plant:5, hauler:6, loads_on_date:7, tons:8, markup:9, commission:10
 };
-const FIELD_ORDER = ['delivery_date','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
+const FIELD_ORDER = ['notes','delivery_date','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
 const FIELD_TYPE = {
-  delivery_date:'date', product:'select-product', load_number:'text',
+  notes:'text', delivery_date:'date', product:'select-product', load_number:'text',
   customer_name:'text', plant:'text', hauler:'text',
   loads_on_date:'number', tons:'decimal', markup:'decimal', commission:'decimal'
 };
@@ -133,7 +132,7 @@ function renderSheet() {
   const tbody = document.getElementById('sheet-body');
   if (!tbody) return;
   if (!filteredLines.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="table-empty">No loads found for this week.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="table-empty">No loads found for this week.</td></tr>';
     return;
   }
   const grouped = {};
@@ -147,7 +146,7 @@ function renderSheet() {
     const d = new Date(dateStr+'T00:00:00');
     const dayName = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
     const count = grouped[dateStr].length;
-    html += `<tr class="date-row"><td colspan="11">${dayName} &mdash; ${count} load${count!==1?'s':''}</td></tr>`;
+    html += `<tr class="date-row"><td colspan="12">${dayName} &mdash; ${count} load${count!==1?'s':''}</td></tr>`;
 
     grouped[dateStr].forEach(l => {
       const farmer = l.customer_name||(l.orders&&l.orders.customers?l.orders.customers.name:'');
@@ -157,9 +156,11 @@ function renderSheet() {
       const markup = l.markup!=null ? l.markup : '';
       const commission = l.commission!=null ? l.commission : '';
       const commClass = commission!=='' ? 'cell-commission' : 'cell-commission empty';
+      const noteVal = l.notes||'';
 
       html += `
         <tr data-id="${l.id}" class="${rowClass}">
+          <td><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit(${l.id},'notes')">${noteVal||'note'}</div></td>
           <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit(${l.id},'delivery_date')">${formatDate(l.delivery_date)}</div></td>
           <td><div class="cell-view" onclick="startEdit(${l.id},'product')">${l.product||''}</div></td>
           <td><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit(${l.id},'load_number')">${l.load_number||'add load #'}</div></td>
@@ -169,7 +170,7 @@ function renderSheet() {
           <td><div class="cell-view" onclick="startEdit(${l.id},'loads_on_date')">${l.loads_on_date||1}</div></td>
           <td><div class="cell-view${tons===''?' empty':''}" onclick="startEdit(${l.id},'tons')">${tons!==''?tons:'tons'}</div></td>
           <td><div class="cell-view${markup===''?' empty':''}" onclick="startEdit(${l.id},'markup')">${markup!==''?('$'+markup):'markup'}</div></td>
-          <td><div class="${commClass}" style="padding:0 8px;height:34px;display:flex;align-items:center;font-size:12px;cursor:text" onclick="startEdit(${l.id},'commission')">${commission!==''?('$'+commission):'—'}</div></td>
+          <td><div class="${commClass}" style="padding:0 8px;height:34px;display:flex;align-items:center;font-size:12px;cursor:pointer" onclick="startEdit(${l.id},'commission')">${commission!==''?('$'+commission):'—'}</div></td>
           <td><button class="del-row-btn" onclick="deleteLine(${l.id})" title="Delete">×</button></td>
         </tr>`;
     });
@@ -177,14 +178,17 @@ function renderSheet() {
   tbody.innerHTML = html;
 }
 
-// ── Inline editing ────────────────────────────────────
+// ── Single-click inline editing ───────────────────────
 function startEdit(lineId, field) {
-  if (activeCell) commitCell();
+  if (activeCell) commitCell(false);
+
   const tr = document.querySelector(`tr[data-id="${lineId}"]`);
   if (!tr) return;
   const colIdx = COL_MAP[field];
   const td = tr.children[colIdx];
+  if (!td) return;
   td.classList.add('cell-active');
+
   const line = allLines.find(l => l.id===lineId);
   const currentVal = line ? (line[field]!=null ? line[field] : '') : '';
   const type = FIELD_TYPE[field];
@@ -193,7 +197,10 @@ function startEdit(lineId, field) {
   if (type==='select-product') {
     input = document.createElement('select');
     input.className = 'cell-input';
-    PRODUCTS.forEach(p => { const o=document.createElement('option'); o.textContent=p; if(p===currentVal) o.selected=true; input.appendChild(o); });
+    PRODUCTS.forEach(p => {
+      const o=document.createElement('option');
+      o.textContent=p; if(p===currentVal) o.selected=true; input.appendChild(o);
+    });
   } else {
     input = document.createElement('input');
     input.className = 'cell-input';
@@ -203,20 +210,23 @@ function startEdit(lineId, field) {
     input.value = currentVal;
   }
 
-  input.onblur = () => commitCell();
+  // Single click focus — no double click needed
+  input.onblur = () => commitCell(true);
   input.onkeydown = e => {
-    if (e.key==='Enter') { e.preventDefault(); commitCell(); }
-    if (e.key==='Tab') { e.preventDefault(); commitCell(); moveNext(lineId, field); }
+    if (e.key==='Enter') { e.preventDefault(); commitCell(true); }
+    if (e.key==='Tab') { e.preventDefault(); commitCell(true); moveNext(lineId, field); }
     if (e.key==='Escape') { td.classList.remove('cell-active'); renderSheet(); activeCell=null; }
   };
 
-  td.innerHTML=''; td.appendChild(input);
+  td.innerHTML='';
+  td.appendChild(input);
   input.focus();
   if (type!=='select-product'&&type!=='date') input.select();
+
   activeCell = { td, lineId, field, type, input, oldVal: currentVal };
 }
 
-async function commitCell() {
+async function commitCell(save) {
   if (!activeCell) return;
   const { td, lineId, field, type, input, oldVal } = activeCell;
   activeCell = null;
@@ -232,22 +242,22 @@ async function commitCell() {
 
   const strNew = newVal!=null?String(newVal):'';
   const strOld = oldVal!=null?String(oldVal):'';
-  if (strNew===strOld) { renderSheet(); return; }
 
   line[field] = newVal;
 
-  const updatePayload = { [field]: newVal };
-  if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
-  if (field==='customer_name' && newVal && line.delivery_date && line.product) {
-    autoFulfillOrder(newVal, line.product, line.delivery_date);
+  if (save && strNew!==strOld) {
+    const updatePayload = { [field]: newVal };
+    if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
+    if (field==='customer_name' && newVal && line.delivery_date && line.product) {
+      autoFulfillOrder(newVal, line.product, line.delivery_date);
+    }
+    try {
+      await sb('order_lines?id=eq.'+lineId, {
+        method:'PATCH', headers:{'Prefer':'return=minimal'},
+        body: JSON.stringify(updatePayload)
+      });
+    } catch(e) { console.error('Save error:', e); }
   }
-
-  try {
-    await sb('order_lines?id=eq.'+lineId, {
-      method:'PATCH', headers:{'Prefer':'return=minimal'},
-      body: JSON.stringify(updatePayload)
-    });
-  } catch(e) { console.error('Save error:', e); }
 
   renderMetrics();
   renderSheet();
@@ -304,6 +314,7 @@ function importLoads() {
 
 function renderEntryTable() {
   const tbody = document.getElementById('entry-tbody');
+  if (!tbody) return;
   if (!importedRows.length) { tbody.innerHTML='<tr><td colspan="6" class="table-empty">No loads.</td></tr>'; return; }
   tbody.innerHTML = importedRows.map((r,i) => `
     <tr>
@@ -361,6 +372,7 @@ function clearEntryForm() {
 // ── Farmer orders ─────────────────────────────────────
 function renderOrdersTable() {
   const tbody=document.getElementById('orders-tbody');
+  if (!tbody) return;
   const active=allOrders.filter(o=>(o.order_lines||[]).some(l=>l.status!=='Fulfilled'));
   if (!active.length) { tbody.innerHTML='<tr><td colspan="6" class="table-empty">No outstanding farmer orders.</td></tr>'; return; }
   tbody.innerHTML=active.map(o=>{
@@ -378,6 +390,7 @@ function renderOrdersTable() {
 // ── Customers ─────────────────────────────────────────
 function renderCustomersTable() {
   const tbody=document.getElementById('customers-tbody');
+  if (!tbody) return;
   if (!allCustomers.length) { tbody.innerHTML='<tr><td colspan="3" class="table-empty">No customers yet.</td></tr>'; return; }
   tbody.innerHTML=allCustomers.map(c=>`
     <tr>
