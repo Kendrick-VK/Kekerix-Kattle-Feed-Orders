@@ -1,6 +1,6 @@
 const SUPABASE_URL = 'https://gghfgkzkgzfurbhwdbgv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnaGZna3prZ3pmdXJiaHdkYmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNDA3NjEsImV4cCI6MjA5MDgxNjc2MX0.Bn4mwiEbvlkPySs8ewZiH4NGi_2k6_Yciv1tscvW20o';
- 
+
 const sb = (path, opts = {}) => fetch(SUPABASE_URL + '/rest/v1/' + path, {
   headers: {
     'apikey': SUPABASE_KEY,
@@ -11,22 +11,22 @@ const sb = (path, opts = {}) => fetch(SUPABASE_URL + '/rest/v1/' + path, {
   },
   ...opts
 }).then(r => r.json());
- 
+
 const PRODUCTS = [
   "Wet distillers", "Modified distillers", "Dry distillers",
   "Loosehulls", "Soyhull pellets", "Syrup", "Corn screenings"
 ];
- 
+
 let customers = [];
 let selectedProducts = [];
 let productLoads = {};
 let productTotals = {};
- 
-// ── Init ──────────────────────────────────────────────
+let editingCustomerId = null;
+
 async function init() {
   await loadCustomers();
 }
- 
+
 async function loadCustomers() {
   try {
     const data = await sb('customers?order=name.asc');
@@ -36,25 +36,22 @@ async function loadCustomers() {
     document.getElementById('f-customer').innerHTML = '<option value="">Error loading customers</option>';
   }
 }
- 
+
 function populateCustomerDropdown() {
   const sel = document.getElementById('f-customer');
   sel.innerHTML = '<option value="">Select your name...</option>';
   customers.forEach(c => {
     const o = document.createElement('option');
-    o.value = c.id;
-    o.textContent = c.name;
-    sel.appendChild(o);
+    o.value = c.id; o.textContent = c.name; sel.appendChild(o);
   });
 }
- 
+
 function customerSelected() {
   const id = parseInt(document.getElementById('f-customer').value);
   const c = customers.find(x => x.id === id);
   document.getElementById('f-phone').value = c ? c.phone : '';
 }
- 
-// ── Tabs ──────────────────────────────────────────────
+
 function showTab(id) {
   document.querySelectorAll('.tab').forEach((t, i) =>
     t.classList.toggle('active', ['farmer-form', 'admin-customers'][i] === id));
@@ -62,8 +59,7 @@ function showTab(id) {
     p.classList.toggle('active', p.id === id));
   if (id === 'admin-customers') renderCustomerList();
 }
- 
-// ── Steps ─────────────────────────────────────────────
+
 function goStep(n) {
   if (n === 2) {
     if (!document.getElementById('f-customer').value) { alert('Please select your name first.'); return; }
@@ -79,8 +75,7 @@ function goStep(n) {
       'step' + (i === n ? ' active' : i < n ? ' done' : '');
   });
 }
- 
-// ── Product chips ─────────────────────────────────────
+
 function buildProductChips() {
   const el = document.getElementById('product-chips');
   el.innerHTML = '';
@@ -91,18 +86,14 @@ function buildProductChips() {
     chip.onclick = () => {
       if (selectedProducts.includes(p)) {
         selectedProducts = selectedProducts.filter(x => x !== p);
-        delete productLoads[p];
-        delete productTotals[p];
-      } else {
-        selectedProducts.push(p);
-      }
+        delete productLoads[p]; delete productTotals[p];
+      } else selectedProducts.push(p);
       chip.classList.toggle('selected', selectedProducts.includes(p));
     };
     el.appendChild(chip);
   });
 }
- 
-// ── Weekdays ──────────────────────────────────────────
+
 function getWeekdays() {
   const days = [];
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -117,8 +108,7 @@ function getWeekdays() {
     }
   return days;
 }
- 
-// ── Product blocks ────────────────────────────────────
+
 function buildProductBlocks() {
   const el = document.getElementById('product-blocks');
   el.innerHTML = '';
@@ -142,12 +132,12 @@ function buildProductBlocks() {
     updateTally(p, sid);
   });
 }
- 
+
 function totalChanged(productName, sid) {
   productTotals[productName] = parseInt(document.getElementById('total_' + sid).value) || 0;
   updateTally(productName, sid);
 }
- 
+
 function buildDayGrid(sid, productName) {
   const grid = document.getElementById('daygrid_' + sid);
   grid.innerHTML = '';
@@ -156,8 +146,7 @@ function buildDayGrid(sid, productName) {
   days.forEach((item, i) => {
     if (i === 0 || i === 5) {
       const lbl = document.createElement('div');
-      lbl.className = 'week-label';
-      lbl.textContent = i === 0 ? 'This week' : 'Next week';
+      lbl.className = 'week-label'; lbl.textContent = i === 0 ? 'This week' : 'Next week';
       grid.appendChild(lbl);
     }
     const ts = item.date.getTime();
@@ -180,7 +169,7 @@ function buildDayGrid(sid, productName) {
     grid.appendChild(card);
   });
 }
- 
+
 function changeLoad(productName, sid, ts, delta) {
   if (!productLoads[productName]) productLoads[productName] = {};
   const cur = productLoads[productName][ts] || 0;
@@ -192,7 +181,7 @@ function changeLoad(productName, sid, ts, delta) {
   if (cardEl) cardEl.classList.toggle('active', next > 0);
   updateTally(productName, sid);
 }
- 
+
 function updateTally(productName, sid) {
   const loads = productLoads[productName] || {};
   const assigned = Object.values(loads).reduce((a, b) => a + b, 0);
@@ -207,12 +196,11 @@ function updateTally(productName, sid) {
     else el.classList.add('under');
   }
 }
- 
+
 function getTotalAssigned(productName) {
   return Object.values(productLoads[productName] || {}).reduce((a, b) => a + b, 0);
 }
- 
-// ── Submit order ──────────────────────────────────────
+
 async function submitOrder() {
   const msg = document.getElementById('form-msg');
   const btn = document.getElementById('submit-btn');
@@ -224,67 +212,82 @@ async function submitOrder() {
     else if (assigned !== total) errors.push(`${p}: ${assigned} of ${total} loads assigned — adjust your days to match.`);
   });
   if (errors.length) { msg.style.color = 'red'; msg.textContent = errors[0]; return; }
- 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Submitting...';
-  msg.textContent = '';
- 
+
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Submitting...'; msg.textContent = '';
   try {
     const custId = parseInt(document.getElementById('f-customer').value);
     const notes = document.getElementById('f-notes').value.trim();
-    const orderRes = await sb('orders', {
-      method: 'POST',
-      body: JSON.stringify({ customer_id: custId, notes, status: 'Pending' })
-    });
+    const orderRes = await sb('orders', { method: 'POST', body: JSON.stringify({ customer_id: custId, notes, status: 'Pending' }) });
     const order = Array.isArray(orderRes) ? orderRes[0] : orderRes;
     if (!order || !order.id) throw new Error('Failed to create order');
- 
     const lines = [];
     selectedProducts.forEach(p => {
       const total = parseInt(productTotals[p]);
       Object.entries(productLoads[p]).forEach(([ts, loads]) => {
         if (loads > 0) {
           const d = new Date(parseInt(ts));
-          const dateStr = d.toISOString().split('T')[0];
-          lines.push({ order_id: order.id, product: p, total_loads: total, delivery_date: dateStr, loads_on_date: loads, status: 'Pending' });
+          lines.push({ order_id: order.id, product: p, total_loads: total, delivery_date: d.toISOString().split('T')[0], loads_on_date: loads, status: 'Pending' });
         }
       });
     });
     await sb('order_lines', { method: 'POST', body: JSON.stringify(lines) });
- 
-    msg.style.color = 'green';
-    msg.textContent = 'Order submitted successfully!';
+    msg.style.color = 'green'; msg.textContent = 'Order submitted successfully!';
     selectedProducts = []; productLoads = {}; productTotals = {};
     document.getElementById('f-customer').value = '';
     document.getElementById('f-phone').value = '';
     document.getElementById('f-notes').value = '';
     setTimeout(() => { goStep(1); msg.textContent = ''; }, 2000);
   } catch (e) {
-    msg.style.color = 'red';
-    msg.textContent = 'Error submitting order: ' + e.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Submit order';
-  }
+    msg.style.color = 'red'; msg.textContent = 'Error: ' + e.message;
+  } finally { btn.disabled = false; btn.textContent = 'Submit order'; }
 }
- 
+
 // ── Customer management ───────────────────────────────
 async function renderCustomerList() {
   const el = document.getElementById('cust-list');
   el.innerHTML = '<span class="spinner"></span> Loading...';
   await loadCustomers();
-  if (!customers.length) {
-    el.innerHTML = '<p style="font-size:13px;color:#666">No customers yet. Add one below.</p>';
-    return;
-  }
+  if (!customers.length) { el.innerHTML = '<p style="font-size:13px;color:#666">No customers yet.</p>'; return; }
   el.innerHTML = customers.map(c => `
     <div class="cust-row">
-      <div class="cust-name">${c.name}</div>
-      <div class="cust-phone">${c.phone}</div>
-      <button class="btn-danger" onclick="removeCustomer(${c.id})">Remove</button>
+      <div id="cust-display-${c.id}" style="flex:1;display:flex;align-items:center;gap:8px">
+        <div class="cust-name">${c.name}</div>
+        <div class="cust-phone">${c.phone}</div>
+      </div>
+      <div id="cust-edit-${c.id}" style="flex:1;display:none;gap:8px;align-items:center">
+        <input type="text" id="cust-name-input-${c.id}" value="${c.name}" style="flex:1;font-size:13px;padding:4px 8px;border:1px solid #ddd;border-radius:6px" />
+        <button style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid #B5D4F4;background:#EBF4FD;color:#185FA5;cursor:pointer" onclick="saveCustomerName(${c.id})">Save</button>
+        <button style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid #ddd;background:transparent;cursor:pointer;color:#666" onclick="cancelEditCustomer(${c.id})">Cancel</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-sm" id="cust-edit-btn-${c.id}" onclick="startEditCustomer(${c.id})">Edit</button>
+        <button class="btn-danger" onclick="removeCustomer(${c.id})">Remove</button>
+      </div>
     </div>`).join('');
 }
- 
+
+function startEditCustomer(id) {
+  document.getElementById('cust-display-' + id).style.display = 'none';
+  document.getElementById('cust-edit-' + id).style.display = 'flex';
+  document.getElementById('cust-edit-btn-' + id).style.display = 'none';
+  document.getElementById('cust-name-input-' + id).focus();
+}
+
+function cancelEditCustomer(id) {
+  document.getElementById('cust-display-' + id).style.display = 'flex';
+  document.getElementById('cust-edit-' + id).style.display = 'none';
+  document.getElementById('cust-edit-btn-' + id).style.display = 'inline-block';
+}
+
+async function saveCustomerName(id) {
+  const name = document.getElementById('cust-name-input-' + id).value.trim();
+  if (!name) { alert('Name cannot be empty.'); return; }
+  try {
+    await sb('customers?id=eq.' + id, { method: 'PATCH', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ name }) });
+    await loadCustomers(); renderCustomerList();
+  } catch(e) { alert('Error saving: ' + e.message); }
+}
+
 async function addCustomer() {
   const name = document.getElementById('new-cust-name').value.trim();
   const phone = document.getElementById('new-cust-phone').value.trim();
@@ -297,11 +300,9 @@ async function addCustomer() {
     document.getElementById('new-cust-phone').value = '';
     msg.style.color = 'green'; msg.textContent = name + ' added.';
     renderCustomerList();
-  } catch (e) {
-    msg.style.color = 'red'; msg.textContent = 'Error: ' + e.message;
-  }
+  } catch (e) { msg.style.color = 'red'; msg.textContent = 'Error: ' + e.message; }
 }
- 
+
 async function removeCustomer(id) {
   if (!confirm('Remove this customer?')) return;
   try {
@@ -309,5 +310,5 @@ async function removeCustomer(id) {
     renderCustomerList();
   } catch (e) { alert('Error removing customer.'); }
 }
- 
+
 init();
