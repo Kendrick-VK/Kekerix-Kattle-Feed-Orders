@@ -32,6 +32,7 @@
       <button class="admin-tab active" id="tab-loads" onclick="showAdminTab('loads')">All loads</button>
       <button class="admin-tab" id="tab-entry" onclick="showAdminTab('entry')">+ Enter loads from plant</button>
       <button class="admin-tab" id="tab-orders" onclick="showAdminTab('orders')">Farmer orders</button>
+      <button class="admin-tab" id="tab-customers" onclick="showAdminTab('customers')">Customers</button>
     </div>
 
     <!-- ALL LOADS TAB -->
@@ -56,20 +57,12 @@
         </select>
         <input type="text" id="filter-search" placeholder="Search farmer, plant, load #..." oninput="applyFilters()" style="flex:2;min-width:180px" />
       </div>
-
       <div class="table-wrap">
         <table class="load-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Product</th>
-              <th>Load #</th>
-              <th>Customer</th>
-              <th>Plant</th>
-              <th>Trucker</th>
-              <th>Loads</th>
-              <th>Status</th>
-              <th></th>
+              <th>Date</th><th>Product</th><th>Load #</th><th>Customer</th>
+              <th>Plant</th><th>Trucker</th><th>Loads</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody id="loads-tbody">
@@ -83,7 +76,6 @@
     <div id="panel-entry" style="display:none">
       <div class="card">
         <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem">Paste loads from plant</div>
-
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
           <div>
             <label class="field-label">Plant</label>
@@ -107,20 +99,16 @@
             <input type="date" id="entry-date" style="width:100%" />
           </div>
         </div>
-
         <div>
           <label class="field-label">Load numbers — paste or type one per line</label>
           <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;SC136-0574-003&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px"></textarea>
         </div>
-
         <div style="display:flex;justify-content:flex-end;margin-top:0.75rem;gap:8px">
           <button class="btn-sm" onclick="clearEntryForm()">Clear</button>
           <button class="btn-primary" onclick="importLoads()" style="width:auto;margin-top:0;padding:8px 24px">Import loads</button>
         </div>
         <p id="entry-msg" style="font-size:12px;margin-top:0.5rem"></p>
       </div>
-
-      <!-- Editable load table -->
       <div id="entry-table-wrap" style="display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
           <div style="font-size:14px;font-weight:500;color:var(--color-text-primary)" id="entry-table-title">Imported loads</div>
@@ -129,14 +117,7 @@
         <div class="table-wrap">
           <table class="load-table">
             <thead>
-              <tr>
-                <th>Load #</th>
-                <th>Plant</th>
-                <th>Product</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th></th>
-              </tr>
+              <tr><th>Load #</th><th>Plant</th><th>Product</th><th>Date</th><th>Customer</th><th></th></tr>
             </thead>
             <tbody id="entry-tbody"></tbody>
           </table>
@@ -150,19 +131,42 @@
       <div class="table-wrap">
         <table class="load-table">
           <thead>
-            <tr>
-              <th>Submitted</th>
-              <th>Customer</th>
-              <th>Product</th>
-              <th>Total loads</th>
-              <th>Delivery window</th>
-              <th>Notes</th>
-            </tr>
+            <tr><th>Submitted</th><th>Customer</th><th>Product</th><th>Total loads</th><th>Delivery window</th><th>Notes</th></tr>
           </thead>
           <tbody id="orders-tbody">
             <tr><td colspan="6" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- CUSTOMERS TAB -->
+    <div id="panel-customers" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:1rem">Customer list</div>
+        <div class="table-wrap" style="margin-bottom:1rem">
+          <table class="load-table">
+            <thead>
+              <tr><th>Name</th><th>Phone</th><th></th></tr>
+            </thead>
+            <tbody id="customers-tbody">
+              <tr><td colspan="3" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:0.75rem">Add new customer</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+          <div>
+            <label class="field-label">Name</label>
+            <input type="text" id="new-cust-name" placeholder="Farm or farmer name" style="width:100%" />
+          </div>
+          <div>
+            <label class="field-label">Phone</label>
+            <input type="tel" id="new-cust-phone" placeholder="605-555-0100" style="width:100%" />
+          </div>
+          <button class="btn-sm" onclick="addCustomer()" style="height:36px">Add</button>
+        </div>
+        <p id="cust-msg" style="font-size:12px;margin-top:0.5rem"></p>
       </div>
     </div>
 
@@ -207,6 +211,24 @@
       <button class="btn-primary" onclick="saveEdit()" style="flex:2;margin-top:0">Save</button>
     </div>
     <p style="font-size:12px;margin-top:0.5rem" id="modal-msg"></p>
+  </div>
+
+  <!-- Edit customer modal -->
+  <div class="modal" id="edit-cust-modal" style="display:none;z-index:202">
+    <div class="modal-title">Edit customer</div>
+    <div style="margin-top:1rem">
+      <label class="field-label">Name</label>
+      <input type="text" id="ec-name" style="width:100%" />
+    </div>
+    <div style="margin-top:0.75rem">
+      <label class="field-label">Phone</label>
+      <input type="tel" id="ec-phone" style="width:100%" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn-sm" onclick="closeCustomerModal()" style="flex:1;padding:9px">Cancel</button>
+      <button class="btn-primary" onclick="saveCustomer()" style="flex:2;margin-top:0">Save</button>
+    </div>
+    <p style="font-size:12px;margin-top:0.5rem" id="ec-msg"></p>
   </div>
 
   <script src="admin.js"></script>
