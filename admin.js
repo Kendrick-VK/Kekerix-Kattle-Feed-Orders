@@ -54,10 +54,10 @@ async function loadOrderLines() {
 
 async function loadOrders() {
   try {
-    // Load farmer order requests — lines submitted via the farmer form (no load_number, not fulfilled)
-    const lines = await sb('order_lines?select=*,orders(id,customer_id,submitted_at,customers(id,name,phone))&load_number=is.null&status=neq.Fulfilled&order=delivery_date.asc');
-    allOrders = Array.isArray(lines) ? lines : [];
-  } catch(e) { console.error(e); }
+    const lines = await sb('order_lines?select=*,orders(id,customer_id,submitted_at,customers(id,name,phone))&order_id=not.is.null&status=in.(Pending,Scheduled)&order=delivery_date.asc');
+    // Filter to only farmer order lines (no load_number)
+    allOrders = Array.isArray(lines) ? lines.filter(l => !l.load_number) : [];
+  } catch(e) { console.error('loadOrders error:', e); }
 }
 
 async function loadCustomers() {
@@ -281,7 +281,7 @@ async function decrementFarmerOrder(customerName, product, deliveryDate) {
       l.orders.customers.id === customer.id &&
       l.product === product &&
       l.delivery_date === deliveryDate &&
-      l.status !== 'Fulfilled'
+      (l.status === 'Pending' || l.status === 'Scheduled')
     );
 
     if (!match) return;
