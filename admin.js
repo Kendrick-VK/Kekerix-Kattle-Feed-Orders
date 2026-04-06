@@ -131,6 +131,7 @@ function renderMetrics() {
 // ── Sheet render ──────────────────────────────────────
 function renderSheet() {
   const tbody = document.getElementById('sheet-body');
+  if (!tbody) return;
   if (!filteredLines.length) {
     tbody.innerHTML = '<tr><td colspan="11" class="table-empty">No loads found for this week.</td></tr>';
     return;
