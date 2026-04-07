@@ -53,6 +53,11 @@ async function init() {
   renderMetrics();
   renderSheet();
   document.addEventListener('keydown', handleKeyboard);
+  // Backdrop click closes whichever modal is open
+  document.getElementById('modal-backdrop').addEventListener('click', () => {
+    if (document.getElementById('edit-cust-modal').style.display !== 'none') closeModal();
+    if (document.getElementById('paste-date-modal').style.display !== 'none') closePasteModal();
+  });
 }
 
 // ── Data ──────────────────────────────────────────────
