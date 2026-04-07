@@ -6,41 +6,33 @@
   <title>Feed Orders — Admin</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="admin.css" />
-  <style>
-    .farmer-order-badge {
-      display: inline-block;
-      background: #FEF3C7;
-      color: #92400E;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 1px 7px;
-      border-radius: 10px;
-      white-space: nowrap;
-      line-height: 1.6;
-    }
-  </style>
 </head>
 <body>
 
+  <!-- HEADER -->
   <div class="admin-header">
     <div class="admin-header-inner">
-      <div>
-        <div class="admin-title">Feed Orders Dashboard</div>
-        <div class="admin-subtitle" id="week-label"></div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div>
+          <div class="admin-title">Kekerix Kattle Feed Orders</div>
+          <div class="admin-subtitle" id="week-label"></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm" onclick="prevWeek()">← Prev</button>
+          <button class="btn-sm" onclick="todayWeek()">This week</button>
+          <button class="btn-sm" onclick="nextWeek()">Next →</button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn-sm" onclick="prevWeek()">← Prev</button>
-        <button class="btn-sm" onclick="todayWeek()">This week</button>
-        <button class="btn-sm" onclick="nextWeek()">Next →</button>
-        <a href="index.html" class="btn-sm" style="text-decoration:none">+ Farmer order</a>
-      </div>
+      <a href="index.html" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 14px">+ Farmer order</a>
     </div>
   </div>
 
   <div class="admin-container">
 
+    <!-- METRICS -->
     <div class="metric-grid" id="metrics"></div>
 
+    <!-- TABS -->
     <div class="admin-tabs">
       <button class="admin-tab active" id="tab-loads" onclick="showAdminTab('loads')">All loads</button>
       <button class="admin-tab" id="tab-entry" onclick="showAdminTab('entry')">+ Enter loads from plant</button>
@@ -48,10 +40,12 @@
       <button class="admin-tab" id="tab-customers" onclick="showAdminTab('customers')">Customers</button>
     </div>
 
-    <!-- ALL LOADS TAB -->
+    <!-- ══ ALL LOADS TAB ══════════════════════════════ -->
     <div id="panel-loads">
-      <div class="filter-bar">
-        <select id="filter-product" onchange="applyFilters()">
+
+      <!-- Toolbar row 1: filters -->
+      <div class="toolbar">
+        <select id="filter-product" onchange="applyFilters()" style="width:150px">
           <option value="">All products</option>
           <option>Wet distillers</option>
           <option>Modified distillers</option>
@@ -62,35 +56,55 @@
           <option>Corn screenings</option>
           <option>Gluten</option>
         </select>
-        <input type="text" id="filter-search" placeholder="Search farmer, plant, load #..." oninput="applyFilters()" style="flex:2;min-width:180px" />
+        <select id="filter-plant" onchange="applyFilters()" style="width:140px">
+          <option value="">All plants</option>
+        </select>
+        <select id="filter-trucker" onchange="applyFilters()" style="width:140px">
+          <option value="">All truckers</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="Search customer, load #, notes…" oninput="applyFilters()" style="width:220px" />
+        <button class="toolbar-btn" onclick="clearFilters()">✕ Clear filters</button>
+        <div class="toolbar-sep"></div>
+        <span id="filter-count" style="font-size:12px;color:#888"></span>
       </div>
+
+      <!-- Toolbar row 2: selection actions (hidden until rows selected) -->
+      <div class="toolbar" id="selection-toolbar" style="display:none;background:#e8f0fe;border-bottom-color:#a8c7fa">
+        <span id="selection-count" style="font-size:12px;font-weight:500;color:#1a73e8"></span>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" onclick="deleteSelectedRows()">🗑 Delete selected</button>
+        <button class="toolbar-btn" onclick="clearSelection()">✕ Deselect</button>
+      </div>
+
       <div class="sheet-wrap">
         <table class="sheet-table" id="sheet-table">
           <thead>
             <tr>
-              <th style="width:90px">Comments</th>
+              <th class="col-rownum">#</th>
+              <th class="col-check"><input type="checkbox" id="check-all" onchange="toggleAllRows(this.checked)" title="Select all" /></th>
+              <th style="width:90px">Notes</th>
               <th style="width:95px">Date</th>
               <th style="width:130px">Product</th>
               <th style="width:115px">Load #</th>
               <th style="width:160px">Customer</th>
-              <th style="width:115px">Plant</th>
+              <th style="width:120px">Plant</th>
               <th style="width:130px">Trucker</th>
               <th style="width:50px">Loads</th>
               <th style="width:65px">Tons</th>
               <th style="width:75px">Markup</th>
               <th style="width:90px">Commission</th>
-              <th style="width:36px"></th>
+              <th style="width:30px"></th>
             </tr>
           </thead>
           <tbody id="sheet-body">
-            <tr><td colspan="12" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            <tr><td colspan="14" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
       </div>
-      <div class="sheet-hint">Click any cell to edit inline. Tab moves right, Enter confirms. Changes save automatically.</div>
+      <div class="sheet-hint">Click cell to edit · Tab = next cell · Enter = confirm · Esc = cancel · Click row # to select row</div>
     </div>
 
-    <!-- ENTER LOADS TAB -->
+    <!-- ══ ENTER LOADS TAB ════════════════════════════ -->
     <div id="panel-entry" style="display:none">
       <div class="card">
         <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Paste loads from plant</div>
@@ -128,23 +142,27 @@
         </div>
         <div style="margin-top:1rem">
           <label class="field-label">Or paste load numbers — one per line</label>
-          <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;SC136-0574-003&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px"></textarea>
+          <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px;border:1px solid #dadce0;border-radius:4px;padding:8px"></textarea>
         </div>
         <div style="display:flex;justify-content:flex-end;margin-top:0.75rem;gap:8px">
           <button class="btn-sm" onclick="clearEntryForm()">Clear</button>
-          <button class="btn-primary" onclick="importLoads()" style="width:auto;margin-top:0;padding:8px 24px">Import loads</button>
+          <button class="btn-primary" onclick="importLoads()" style="margin-top:0">Import loads</button>
         </div>
         <p id="entry-msg" style="font-size:12px;margin-top:0.5rem"></p>
       </div>
-      <div id="entry-table-wrap" style="display:none">
+
+      <div id="entry-table-wrap" style="display:none;margin:0 12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
           <div style="font-size:14px;font-weight:500;color:#1a1a1a" id="entry-table-title">Imported loads</div>
-          <button class="btn-primary" onclick="saveAllLoads()" style="width:auto;margin-top:0;padding:8px 20px" id="save-all-btn">Save all to database</button>
+          <button class="btn-primary" onclick="saveAllLoads()" id="save-all-btn">Save all to database</button>
         </div>
         <div class="sheet-wrap">
           <table class="sheet-table">
             <thead>
-              <tr><th>Load #</th><th>Plant</th><th>Product</th><th>Date</th><th>Customer</th><th></th></tr>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>Load #</th><th>Plant</th><th>Product</th><th>Date</th><th>Customer</th><th></th>
+              </tr>
             </thead>
             <tbody id="entry-tbody"></tbody>
           </table>
@@ -153,17 +171,32 @@
       </div>
     </div>
 
-    <!-- FARMER ORDERS TAB -->
+    <!-- ══ FARMER ORDERS TAB ══════════════════════════ -->
     <div id="panel-orders" style="display:none">
+      <div class="toolbar">
+        <select id="orders-filter-product" onchange="renderOrdersTable()" style="width:160px">
+          <option value="">All products</option>
+          <option>Wet distillers</option>
+          <option>Modified distillers</option>
+          <option>Dry distillers</option>
+          <option>Loosehulls</option>
+          <option>Soyhull pellets</option>
+          <option>Syrup</option>
+          <option>Corn screenings</option>
+          <option>Gluten</option>
+        </select>
+        <input type="text" id="orders-filter-search" placeholder="Search farmer…" oninput="renderOrdersTable()" style="width:200px" />
+        <span id="orders-summary-label" style="font-size:12px;color:#888;margin-left:4px"></span>
+      </div>
       <div class="sheet-wrap">
         <table class="sheet-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Farmer</th>
-              <th>Product</th>
-              <th>Loads needed</th>
-              <th>Ordered</th>
+              <th style="width:120px">Date</th>
+              <th style="width:180px">Farmer</th>
+              <th style="width:160px">Product</th>
+              <th style="width:140px">Loads needed</th>
+              <th style="width:110px">Ordered on</th>
               <th></th>
             </tr>
           </thead>
@@ -174,13 +207,13 @@
       </div>
     </div>
 
-    <!-- CUSTOMERS TAB -->
+    <!-- ══ CUSTOMERS TAB ══════════════════════════════ -->
     <div id="panel-customers" style="display:none">
       <div class="card">
         <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Customer list</div>
         <div class="sheet-wrap" style="margin-bottom:1rem">
           <table class="sheet-table">
-            <thead><tr><th>Name</th><th>Phone</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Phone</th><th style="width:120px"></th></tr></thead>
             <tbody id="customers-tbody">
               <tr><td colspan="3" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
             </tbody>
@@ -202,8 +235,16 @@
       </div>
     </div>
 
+  </div><!-- /admin-container -->
+
+  <!-- UNDO TOAST -->
+  <div id="undo-toast">
+    <span id="undo-msg">Deleted rows</span>
+    <button onclick="undoDelete()">UNDO</button>
+    <button onclick="hideToast()" style="color:#aaa;font-size:11px;font-weight:400">✕</button>
   </div>
 
+  <!-- EDIT CUSTOMER MODAL -->
   <div class="modal-backdrop" id="modal-backdrop" onclick="closeModal()" style="display:none"></div>
   <div class="modal" id="edit-cust-modal" style="display:none">
     <div class="modal-title">Edit customer</div>
