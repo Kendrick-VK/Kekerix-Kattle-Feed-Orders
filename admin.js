@@ -46,7 +46,6 @@ async function init() {
 async function loadOrderLines() {
   try {
     const lines = await sb('order_lines?select=*,orders(id,customer_id,notes,submitted_at,customers(id,name,phone))&order=delivery_date.asc,load_number.asc');
-    // Only show plant loads (have load_number) or unmatched lines — hide fulfilled farmer requests
     allLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled') : [];
     filteredLines = [...allLines];
   } catch(e) { console.error(e); }
@@ -54,9 +53,15 @@ async function loadOrderLines() {
 
 async function loadOrders() {
   try {
-    const lines = await sb('order_lines?select=*,orders(id,customer_id,submitted_at,customers(id,name,phone))&order_id=not.is.null&status=in.(Pending,Scheduled)&order=delivery_date.asc');
-    // Filter to only farmer order lines (no load_number)
-    allOrders = Array.isArray(lines) ? lines.filter(l => !l.load_number) : [];
+    // FIX: Use proper Supabase REST filter syntax — separate params with &
+    // Fetch order_lines that belong to a farmer order (have an order_id) and are not yet fulfilled
+    const lines = await sb(
+      'order_lines?select=*,orders(id,customer_id,submitted_at,customers(id,name,phone))' +
+      '&load_number=is.null' +
+      '&status=in.(Pending,Scheduled)' +
+      '&order=delivery_date.asc'
+    );
+    allOrders = Array.isArray(lines) ? lines : [];
   } catch(e) { console.error('loadOrders error:', e); }
 }
 
@@ -123,9 +128,18 @@ function renderMetrics() {
   const week = allLines.filter(l => l.delivery_date>=ws && l.delivery_date<=we);
   const total = week.length;
   const totalCommission = week.reduce((a,l) => a+(parseFloat(l.commission)||0), 0);
+
+  // Count outstanding farmer order loads this week
+  const pendingOrders = allOrders.filter(l => l.delivery_date>=ws && l.delivery_date<=we);
+  const pendingLoads = pendingOrders.reduce((a,l) => a+(l.loads_on_date||1), 0);
+
   document.getElementById('metrics').innerHTML = `
     <div class="metric"><div class="metric-label">Total loads this week</div><div class="metric-value">${total}</div></div>
     <div class="metric"><div class="metric-label">Commission this week</div><div class="metric-value" style="color:#3B6D11">$${totalCommission.toFixed(2)}</div></div>
+    <div class="metric" style="cursor:pointer" onclick="showAdminTab('orders')">
+      <div class="metric-label">Unfilled farmer orders</div>
+      <div class="metric-value" style="color:${pendingLoads>0?'#B45309':'#3B6D11'}">${pendingLoads}</div>
+    </div>
   `;
 }
 
@@ -160,13 +174,23 @@ function renderSheet() {
       const commClass = commission!=='' ? 'cell-commission' : 'cell-commission empty';
       const noteVal = l.notes||'';
 
+      // Check if this farmer has a pending order for this product+date
+      const farmerOrder = farmer ? getFarmerPendingOrder(farmer, l.product, l.delivery_date) : null;
+      const farmerTag = farmerOrder
+        ? `<span class="farmer-order-badge" title="${farmerOrder.loads_on_date} load(s) still needed">${farmerOrder.loads_on_date} needed</span>`
+        : '';
+
       html += `
         <tr data-id="${l.id}" class="${rowClass}">
           <td><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit(${l.id},'notes')">${noteVal||'note'}</div></td>
           <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit(${l.id},'delivery_date')">${formatDate(l.delivery_date)}</div></td>
           <td><div class="cell-view" onclick="startEdit(${l.id},'product')">${l.product||''}</div></td>
           <td><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit(${l.id},'load_number')">${l.load_number||'add load #'}</div></td>
-          <td><div class="cell-view${!farmer?' empty':''}" onclick="startEdit(${l.id},'customer_name')">${farmer||'assign farmer'}</div></td>
+          <td>
+            <div class="cell-view${!farmer?' empty':''}" onclick="startEdit(${l.id},'customer_name')" style="display:flex;align-items:center;gap:6px">
+              ${farmer||'assign farmer'}${farmerTag}
+            </div>
+          </td>
           <td><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit(${l.id},'plant')">${l.plant||'add plant'}</div></td>
           <td><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit(${l.id},'hauler')" style="${hasTrucker?'color:#854F0B;font-weight:500':''}">${l.hauler||'add trucker'}</div></td>
           <td><div class="cell-view" onclick="startEdit(${l.id},'loads_on_date')">${l.loads_on_date||1}</div></td>
@@ -178,6 +202,17 @@ function renderSheet() {
     });
   });
   tbody.innerHTML = html;
+}
+
+// Helper — find a pending farmer order matching name+product+date
+function getFarmerPendingOrder(customerName, product, deliveryDate) {
+  if (!customerName || !product || !deliveryDate) return null;
+  return allOrders.find(l => {
+    const name = l.orders&&l.orders.customers ? l.orders.customers.name : (l.customer_name||'');
+    return name.toLowerCase().trim() === customerName.toLowerCase().trim()
+      && l.product === product
+      && l.delivery_date === deliveryDate;
+  }) || null;
 }
 
 // ── Single-click inline editing ───────────────────────
@@ -198,6 +233,24 @@ function startEdit(lineId, field) {
     input = document.createElement('select');
     input.className = 'cell-input';
     PRODUCTS.forEach(p => { const o=document.createElement('option'); o.textContent=p; if(p===currentVal) o.selected=true; input.appendChild(o); });
+  } else if (field === 'customer_name') {
+    // Autocomplete from customer list
+    input = document.createElement('input');
+    input.className = 'cell-input';
+    input.type = 'text';
+    input.value = currentVal;
+    input.setAttribute('list', 'customer-datalist');
+    // Ensure datalist exists
+    if (!document.getElementById('customer-datalist')) {
+      const dl = document.createElement('datalist');
+      dl.id = 'customer-datalist';
+      allCustomers.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.name;
+        dl.appendChild(opt);
+      });
+      document.body.appendChild(dl);
+    }
   } else {
     input = document.createElement('input');
     input.className = 'cell-input';
@@ -242,15 +295,15 @@ async function commitCell(save) {
     const updatePayload = { [field]: newVal };
     if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
 
-    // Try to decrement farmer order whenever customer_name, product, or delivery_date changes
-    // as long as all three are now filled in
+    // Decrement farmer order when customer_name is set (or changes),
+    // as long as product and delivery_date are also filled in
     const updatedLine = { ...line, [field]: newVal };
     const farmer = updatedLine.customer_name;
     const product = updatedLine.product;
     const date = updatedLine.delivery_date;
-    if ((field==='customer_name' || field==='product' || field==='delivery_date') && farmer && product && date) {
-      console.log('Calling decrement:', farmer, product, date);
-      decrementFarmerOrder(farmer, product, date);
+
+    if (field === 'customer_name' && newVal && product && date) {
+      await decrementFarmerOrder(newVal, product, date);
     }
 
     try {
@@ -274,21 +327,16 @@ function moveNext(lineId, currentField) {
 async function decrementFarmerOrder(customerName, product, deliveryDate) {
   if (!customerName||!product||!deliveryDate) return;
   try {
-    // Find this customer in allCustomers
-    const customer = allCustomers.find(c =>
-      c.name.toLowerCase().trim() === customerName.toLowerCase().trim()
-    );
-    if (!customer) return;
-
-    // Find their pending order line matching product + date
-    const match = allOrders.find(l =>
-      l.orders &&
-      l.orders.customers &&
-      l.orders.customers.id === customer.id &&
-      l.product === product &&
-      l.delivery_date === deliveryDate &&
-      (l.status === 'Pending' || l.status === 'Scheduled')
-    );
+    // Find matching pending order — check both orders.customers.name and customer_name directly
+    const match = allOrders.find(l => {
+      const name = l.orders&&l.orders.customers
+        ? l.orders.customers.name
+        : (l.customer_name || '');
+      return name.toLowerCase().trim() === customerName.toLowerCase().trim()
+        && l.product === product
+        && l.delivery_date === deliveryDate
+        && (l.status === 'Pending' || l.status === 'Scheduled');
+    });
 
     if (!match) return;
 
@@ -300,6 +348,8 @@ async function decrementFarmerOrder(customerName, product, deliveryDate) {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ status: 'Fulfilled', loads_on_date: 0 })
       });
+      // Remove from local list since it's fulfilled
+      allOrders = allOrders.filter(l => l.id !== match.id);
     } else {
       await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=eq.' + match.id, {
         method: 'PATCH',
@@ -309,9 +359,8 @@ async function decrementFarmerOrder(customerName, product, deliveryDate) {
       match.loads_on_date = remaining;
     }
 
-    // Reload orders to reflect the change in the Farmer Orders tab
-    await loadOrders();
     renderOrdersTable();
+    renderMetrics();
   } catch(e) {
     console.error('Decrement error:', e);
   }
@@ -368,6 +417,10 @@ function renderEntryTable() {
   const tbody = document.getElementById('entry-tbody');
   if (!tbody) return;
   if (!importedRows.length) { tbody.innerHTML='<tr><td colspan="6" class="table-empty">No loads.</td></tr>'; return; }
+
+  // Build customer datalist options string
+  const custOptions = allCustomers.map(c => `<option value="${c.name}">`).join('');
+
   tbody.innerHTML = importedRows.map((r,i) => `
     <tr data-entry-idx="${i}">
       <td style="padding:4px 6px;position:relative">
@@ -381,7 +434,12 @@ function renderEntryTable() {
         </select>
       </td>
       <td style="padding:4px 6px"><input class="entry-input" type="date" value="${r.delivery_date}" onchange="updateImportRow(${i},'delivery_date',this.value)" /></td>
-      <td style="padding:4px 6px"><input class="entry-input" type="text" value="${r.customer_name}" placeholder="Farmer (optional)" onchange="updateImportRow(${i},'customer_name',this.value)" /></td>
+      <td style="padding:4px 6px">
+        <input class="entry-input" type="text" value="${r.customer_name}" placeholder="Farmer (optional)"
+          list="entry-customer-datalist-${i}"
+          onchange="updateImportRow(${i},'customer_name',this.value)" />
+        <datalist id="entry-customer-datalist-${i}">${custOptions}</datalist>
+      </td>
       <td style="padding:4px 6px"><button class="del-btn" onclick="removeImportRow(${i})">✕</button></td>
     </tr>`).join('');
 }
@@ -496,38 +554,67 @@ function renderOrdersTable() {
   const tbody=document.getElementById('orders-tbody');
   if (!tbody) return;
 
-  // Group by customer for a cleaner view
   if (!allOrders.length) {
-    tbody.innerHTML='<tr><td colspan="5" class="table-empty">No outstanding farmer orders.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" class="table-empty">No outstanding farmer orders. 🎉</td></tr>';
     return;
   }
 
-  // Sort by date then customer
+  // Sort by date then customer name
   const sorted = [...allOrders].sort((a,b) => {
     if (a.delivery_date < b.delivery_date) return -1;
     if (a.delivery_date > b.delivery_date) return 1;
-    const aName = a.orders&&a.orders.customers?a.orders.customers.name:'';
-    const bName = b.orders&&b.orders.customers?b.orders.customers.name:'';
+    const aName = a.orders&&a.orders.customers ? a.orders.customers.name : '';
+    const bName = b.orders&&b.orders.customers ? b.orders.customers.name : '';
     return aName.localeCompare(bName);
   });
 
-  tbody.innerHTML = sorted.map(l => {
-    const farmer = l.orders&&l.orders.customers ? l.orders.customers.name : '—';
-    const loads = l.loads_on_date || 1;
-    return `
-      <tr>
-        <td style="padding:9px 12px">${formatDate(l.delivery_date)}</td>
-        <td style="padding:9px 12px;font-weight:500">${farmer}</td>
-        <td style="padding:9px 12px">${l.product}</td>
-        <td style="padding:9px 12px">${loads} load${loads!==1?'s':''} needed</td>
-        <td style="padding:9px 12px">
-          <button class="del-btn" onclick="dismissOrder(${l.id})">Dismiss</button>
-        </td>
-      </tr>`;
-  }).join('');
+  // Group by date for readability
+  const grouped = {};
+  sorted.forEach(l => {
+    const d = l.delivery_date || 'No date';
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(l);
+  });
+
+  let html = '';
+  Object.keys(grouped).sort().forEach(dateStr => {
+    const d = dateStr !== 'No date' ? new Date(dateStr+'T00:00:00') : null;
+    const dayName = d
+      ? d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+      : 'No date set';
+    const groupLoads = grouped[dateStr].reduce((a,l) => a+(l.loads_on_date||1), 0);
+    html += `<tr class="date-row"><td colspan="6">${dayName} &mdash; ${groupLoads} load${groupLoads!==1?'s':''} needed</td></tr>`;
+
+    grouped[dateStr].forEach(l => {
+      const farmer = l.orders&&l.orders.customers ? l.orders.customers.name : '—';
+      const loads = l.loads_on_date || 1;
+      const submittedAt = l.orders&&l.orders.submitted_at
+        ? new Date(l.orders.submitted_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+        : '';
+
+      html += `
+        <tr>
+          <td style="padding:9px 12px">${formatDate(l.delivery_date)}</td>
+          <td style="padding:9px 12px;font-weight:600;font-size:14px">${farmer}</td>
+          <td style="padding:9px 12px">${l.product}</td>
+          <td style="padding:9px 12px">
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <span style="background:${loads>0?'#FEF3C7':'#D1FAE5'};color:${loads>0?'#92400E':'#065F46'};font-weight:700;padding:2px 10px;border-radius:12px;font-size:13px">${loads} load${loads!==1?'s':''} needed</span>
+            </span>
+          </td>
+          <td style="padding:9px 12px;font-size:12px;color:#888">${submittedAt ? 'Ordered '+submittedAt : ''}</td>
+          <td style="padding:9px 12px">
+            <button class="del-btn" onclick="dismissOrder(${l.id})">Dismiss</button>
+          </td>
+        </tr>`;
+    });
+  });
+
+  tbody.innerHTML = html;
 }
 
 async function dismissOrder(id) {
+  if (!confirm('Mark this order as fulfilled?')) return;
   try {
     await sb('order_lines?id=eq.'+id, {
       method:'PATCH', headers:{'Prefer':'return=minimal'},
@@ -535,6 +622,7 @@ async function dismissOrder(id) {
     });
     allOrders = allOrders.filter(l => l.id!==id);
     renderOrdersTable();
+    renderMetrics();
   } catch(e) { alert('Error dismissing order.'); }
 }
 
