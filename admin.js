@@ -860,6 +860,7 @@ async function addCustomer() {
 
 function openCustomerEdit(id) {
   editingCustomerId = id;
+  console.log('Opening edit for customer id:', id, 'found:', allCustomers.find(x => x.id===id));
   const c = allCustomers.find(x => x.id===id);
   if (!c) return;
   document.getElementById('ec-name').value  = c.name;
@@ -883,12 +884,25 @@ async function saveCustomer() {
   const msg   = document.getElementById('ec-msg');
   if (!name||!phone) { msg.style.color='red'; msg.textContent='Name and phone required.'; return; }
   try {
-    await sb('customers?id=eq.'+editingCustomerId, { method:'PATCH', headers:{'Prefer':'return=minimal'}, body:JSON.stringify({name,phone}) });
+    console.log('Saving customer id:', editingCustomerId, {name, phone});
+    const res = await fetch(SUPABASE_URL + '/rest/v1/customers?id=eq.' + editingCustomerId, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({name, phone})
+    });
+    const result = await res.json();
+    console.log('Save customer response:', res.status, result);
+    if (!res.ok) throw new Error(JSON.stringify(result));
     msg.style.color='green'; msg.textContent='Saved!';
     await loadCustomers();
     renderCustomersTable();
     setTimeout(closeModal, 700);
-  } catch(e) { msg.style.color='red'; msg.textContent='Error: '+e.message; }
+  } catch(e) { msg.style.color='red'; msg.textContent='Error: '+e.message; console.error('saveCustomer error:', e); }
 }
 
 async function deleteCustomer(id) {
@@ -896,6 +910,7 @@ async function deleteCustomer(id) {
   const name = customer ? customer.name : 'this customer';
   if (!confirm('Remove ' + name + '?')) return;
   try {
+    console.log('Deleting customer id:', id);
     const res = await fetch(SUPABASE_URL + '/rest/v1/customers?id=eq.' + id, {
       method: 'DELETE',
       headers: {
@@ -905,8 +920,10 @@ async function deleteCustomer(id) {
         'Prefer': 'return=minimal'
       }
     });
+    console.log('Delete response status:', res.status);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      console.log('Delete error body:', body);
       // Foreign key violation — customer has order history
       if (body.code === '23503' || (body.message||'').includes('foreign key')) {
         alert(name + ' cannot be removed because they have existing loads or orders in the system.\n\nRemove their loads first, then delete the customer.');
