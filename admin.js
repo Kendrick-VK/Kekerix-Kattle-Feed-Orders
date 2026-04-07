@@ -824,11 +824,18 @@ function renderCustomersTable() {
       <td style="padding:7px 10px">${c.name}</td>
       <td style="padding:7px 10px">${c.phone}</td>
       <td style="padding:7px 10px;display:flex;gap:6px">
-        <button class="edit-btn" onclick="openCustomerEdit(${c.id})">Edit</button>
-        <button class="del-btn"  onclick="deleteCustomer(${c.id},'${c.name.replace(/'/g,"\\'")}')">Remove</button>
+        <button class="edit-btn" data-cid="${c.id}">Edit</button>
+        <button class="del-btn"  data-cid="${c.id}">Remove</button>
       </td>
     </tr>`).join('');
+  tbody.querySelectorAll('.edit-btn[data-cid]').forEach(btn => {
+    btn.onclick = () => openCustomerEdit(parseInt(btn.dataset.cid));
+  });
+  tbody.querySelectorAll('.del-btn[data-cid]').forEach(btn => {
+    btn.onclick = () => deleteCustomer(parseInt(btn.dataset.cid));
+  });
 }
+
 
 async function addCustomer() {
   const name  = document.getElementById('new-cust-name').value.trim();
@@ -858,8 +865,10 @@ function openCustomerEdit(id) {
 }
 
 function closeModal() {
-  document.getElementById('modal-backdrop').style.display    = 'none';
-  document.getElementById('edit-cust-modal').style.display   = 'none';
+  document.getElementById('edit-cust-modal').style.display = 'none';
+  if (document.getElementById('paste-date-modal').style.display === 'none') {
+    document.getElementById('modal-backdrop').style.display = 'none';
+  }
   editingCustomerId = null;
 }
 
@@ -877,8 +886,10 @@ async function saveCustomer() {
   } catch(e) { msg.style.color='red'; msg.textContent='Error: '+e.message; }
 }
 
-async function deleteCustomer(id, name) {
-  if (!confirm('Remove '+name+'?')) return;
+async function deleteCustomer(id) {
+  const customer = allCustomers.find(c => c.id === id);
+  const name = customer ? customer.name : 'this customer';
+  if (!confirm('Remove ' + name + '?')) return;
   try {
     const res = await fetch(SUPABASE_URL + '/rest/v1/customers?id=eq.' + id, {
       method: 'DELETE',
@@ -1009,7 +1020,9 @@ function openPasteModal() {
 
 function closePasteModal() {
   document.getElementById('paste-date-modal').style.display = 'none';
-  document.getElementById('modal-backdrop').style.display = 'none';
+  if (document.getElementById('edit-cust-modal').style.display === 'none') {
+    document.getElementById('modal-backdrop').style.display = 'none';
+  }
 }
 
 async function confirmPaste() {
