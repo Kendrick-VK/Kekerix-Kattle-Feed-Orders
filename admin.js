@@ -41,12 +41,18 @@ let selectedIds   = new Set();
 let undoBuffer    = [];   // [{rows: [...line objects], orderLinePayloads: [...]}]
 let undoTimer     = null;
 
+// Cut / paste & drag-to-date
+let cutIds        = new Set();   // ids currently cut (Ctrl+X)
+let dragRowId     = null;        // id of row being dragged (or null if multi)
+let dragOverDate  = null;        // date string currently highlighted
+
 // ── Init ──────────────────────────────────────────────
 async function init() {
   renderWeekLabel();
   await Promise.all([loadOrderLines(), loadOrders(), loadCustomers()]);
   renderMetrics();
   renderSheet();
+  document.addEventListener('keydown', handleKeyboard);
 }
 
 // ── Data ──────────────────────────────────────────────
@@ -226,7 +232,11 @@ function renderSheet() {
     const d = new Date(dateStr+'T00:00:00');
     const dayName = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
     const count = grouped[dateStr].length;
-    html += `<tr class="date-row"><td colspan="14">${dayName} — ${count} load${count!==1?'s':''}</td></tr>`;
+    html += `<tr class="date-row" data-date="${dateStr}"
+        ondragover="dateDragOver(event,'${dateStr}')"
+        ondragleave="dateDragLeave(event)"
+        ondrop="dateDrop(event,'${dateStr}')">
+        <td colspan="14">${dayName} — ${count} load${count!==1?'s':''}</td></tr>`;
 
     grouped[dateStr].forEach(l => {
       const farmer   = l.customer_name||(l.orders?.customers?.name)||'';
@@ -244,9 +254,16 @@ function renderSheet() {
         ? `<span class="farmer-order-badge">${farmerOrder.loads_on_date} needed</span>`
         : '';
 
+      const isCut = cutIds.has(l.id);
       html += `
-        <tr data-id="${l.id}" class="${rowClass}" ondblclick="startEdit(${l.id},'notes')">
-          <td class="col-rownum" onclick="toggleRowSelect(${l.id},event)" style="cursor:pointer">${rowNum}</td>
+        <tr data-id="${l.id}" class="${rowClass}${isCut?' row-cut':''}" ondblclick="startEdit(${l.id},'notes')"
+            draggable="false">
+          <td class="col-rownum"
+              onclick="toggleRowSelect(${l.id},event)"
+              draggable="true"
+              onmousedown="rowDragMousedown(event,${l.id})"
+              ondragstart="rowDragStart(event,${l.id})"
+              style="cursor:grab">${rowNum}</td>
           <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange(${l.id},this.checked)" /></td>
           <td class="col-notes-td"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit(${l.id},'notes')">${noteVal||''}</div></td>
           <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit(${l.id},'delivery_date')">${formatDate(l.delivery_date)}</div></td>
@@ -320,12 +337,15 @@ function clearSelection() {
 function updateSelectionToolbar() {
   const tb = document.getElementById('selection-toolbar');
   const ct = document.getElementById('selection-count');
+  const pb = document.getElementById('paste-btn');
   if (selectedIds.size > 0) {
     tb.style.display = 'flex';
     ct.textContent = `${selectedIds.size} row${selectedIds.size!==1?'s':''} selected`;
   } else {
     tb.style.display = 'none';
   }
+  // Show paste button only when there are cut rows
+  if (pb) pb.style.display = cutIds.size > 0 ? 'flex' : 'none';
   updateCheckAllState();
 }
 
@@ -860,10 +880,178 @@ async function saveCustomer() {
 async function deleteCustomer(id, name) {
   if (!confirm('Remove '+name+'?')) return;
   try {
-    await sb('customers?id=eq.'+id, { method:'DELETE', headers:{'Prefer':'return=minimal'} });
-    await loadCustomers();
+    const res = await fetch(SUPABASE_URL + '/rest/v1/customers?id=eq.' + id, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      }
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      // Foreign key violation — customer has order history
+      if (body.code === '23503' || (body.message||'').includes('foreign key')) {
+        alert(name + ' cannot be removed because they have existing loads or orders in the system.\n\nRemove their loads first, then delete the customer.');
+      } else {
+        alert('Error removing customer: ' + (body.message || res.status));
+      }
+      return;
+    }
+    allCustomers = allCustomers.filter(c => c.id !== id);
     renderCustomersTable();
-  } catch(e) { alert('Error removing.'); }
+  } catch(e) { alert('Error removing customer: ' + e.message); }
+}
+
+
+// ── Drag rows to a date header ────────────────────────
+function rowDragMousedown(e, lineId) {
+  // Don't start drag if clicking to select
+  if (!selectedIds.has(lineId)) {
+    // Single row drag — don't change selection, just note the dragged id
+    dragRowId = lineId;
+  } else {
+    dragRowId = null; // will use selectedIds
+  }
+}
+
+function rowDragStart(e, lineId) {
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', lineId);
+  // If dragging a row that isn't selected, treat it as a solo drag
+  if (!selectedIds.has(lineId)) {
+    dragRowId = lineId;
+  } else {
+    dragRowId = null; // drag all selected
+  }
+}
+
+function dateDragOver(e, dateStr) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (dragOverDate !== dateStr) {
+    // Remove highlight from previous
+    document.querySelectorAll('tr.date-row.drag-target').forEach(r => r.classList.remove('drag-target'));
+    dragOverDate = dateStr;
+    const row = document.querySelector(`tr.date-row[data-date="${dateStr}"]`);
+    if (row) row.classList.add('drag-target');
+  }
+}
+
+function dateDragLeave(e) {
+  // Only clear if leaving the row entirely (not just a child)
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-target');
+    dragOverDate = null;
+  }
+}
+
+async function dateDrop(e, dateStr) {
+  e.preventDefault();
+  document.querySelectorAll('tr.date-row.drag-target').forEach(r => r.classList.remove('drag-target'));
+  dragOverDate = null;
+
+  // Which rows are moving?
+  let ids;
+  const droppedId = parseInt(e.dataTransfer.getData('text/plain'));
+  if (dragRowId !== null && !selectedIds.has(droppedId)) {
+    ids = [droppedId];
+  } else {
+    ids = [...selectedIds];
+  }
+  dragRowId = null;
+  if (!ids.length) return;
+
+  await moveRowsToDate(ids, dateStr);
+}
+
+// ── Cut (Ctrl+X) + Paste (Ctrl+V) ─────────────────────
+function handleKeyboard(e) {
+  // Only act when All Loads tab is visible
+  const panel = document.getElementById('panel-loads');
+  if (!panel || panel.style.display === 'none') return;
+  // Don't intercept when typing in an input
+  if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+    e.preventDefault();
+    cutSelectedRows();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    e.preventDefault();
+    if (cutIds.size) openPasteModal();
+  }
+  if (e.key === 'Escape') {
+    if (cutIds.size) { cutIds.clear(); renderSheet(); }
+  }
+}
+
+function cutSelectedRows() {
+  if (!selectedIds.size) return;
+  cutIds = new Set(selectedIds);
+  renderSheet(); // dims the cut rows
+  showToast(`${cutIds.size} row${cutIds.size!==1?'s':''} cut — press Ctrl+V to paste to a new date`);
+}
+
+function openPasteModal() {
+  const modal = document.getElementById('paste-date-modal');
+  const backdrop = document.getElementById('modal-backdrop');
+  const input = document.getElementById('paste-date-input');
+  // Default to monday of current week
+  const { monday } = getWeekRange();
+  input.value = monday.toISOString().split('T')[0];
+  document.getElementById('paste-modal-msg').textContent = `Move ${cutIds.size} row${cutIds.size!==1?'s':''} to:`;
+  modal.style.display = 'block';
+  backdrop.style.display = 'block';
+  input.focus();
+}
+
+function closePasteModal() {
+  document.getElementById('paste-date-modal').style.display = 'none';
+  document.getElementById('modal-backdrop').style.display = 'none';
+}
+
+async function confirmPaste() {
+  const dateStr = document.getElementById('paste-date-input').value;
+  if (!dateStr) return;
+  const ids = [...cutIds];
+  cutIds.clear();
+  closePasteModal();
+  await moveRowsToDate(ids, dateStr);
+  selectedIds.clear();
+  renderSheet();
+}
+
+// ── Core: move rows to a new date ─────────────────────
+async function moveRowsToDate(ids, newDate) {
+  if (!ids.length || !newDate) return;
+  const rows = allLines.filter(l => ids.includes(l.id));
+  if (!rows.length) return;
+
+  const oldDates = rows.map(r => r.delivery_date);
+  const names    = [...new Set(rows.map(r => r.customer_name).filter(Boolean))];
+  const products = [...new Set(rows.map(r => r.product).filter(Boolean))];
+  const dayLabel = formatDate(newDate);
+
+  try {
+    // Patch all rows in parallel
+    await Promise.all(ids.map(id =>
+      fetch(SUPABASE_URL + '/rest/v1/order_lines?id=eq.' + id, {
+        method: 'PATCH',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ delivery_date: newDate })
+      })
+    ));
+
+    // Update local state
+    rows.forEach(r => { r.delivery_date = newDate; });
+
+    applyFilters();
+    showToast(`Moved ${ids.length} load${ids.length!==1?'s':''} to ${dayLabel}`);
+  } catch(e) {
+    alert('Error moving rows: ' + e.message);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────
