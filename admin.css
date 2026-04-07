@@ -112,8 +112,9 @@ body { background: #fff; }
 
 /* ── Sheet wrapper ───────────────────────────────── */
 .sheet-wrap {
-  overflow-x: auto;
+  overflow: auto;
   background: #fff;
+  max-height: calc(100vh - 230px);
 }
 
 /* ── Sheet table — Google Sheets look ───────────── */
@@ -169,7 +170,7 @@ body { background: #fff; }
 .sheet-table thead tr {
   background: #f8f9fa;
   position: sticky;
-  top: 48px;
+  top: 0;
   z-index: 10;
 }
 .sheet-table th {
@@ -382,6 +383,11 @@ select.cell-input { cursor: pointer; }
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
+  width: auto !important;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0 !important;
+  text-decoration: none;
 }
 .btn-primary:hover { background: #1765cc; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
