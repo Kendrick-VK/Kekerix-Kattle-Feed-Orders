@@ -72,7 +72,9 @@
       <div class="toolbar" id="selection-toolbar" style="display:none;background:#e8f0fe;border-bottom-color:#a8c7fa">
         <span id="selection-count" style="font-size:12px;font-weight:500;color:#1a73e8"></span>
         <div class="toolbar-sep"></div>
-        <button class="toolbar-btn" onclick="deleteSelectedRows()">🗑 Delete selected</button>
+        <button class="toolbar-btn" onclick="cutSelectedRows()">✂ Cut (Ctrl+X)</button>
+        <button class="toolbar-btn" onclick="openPasteModal()" id="paste-btn" style="display:none">📋 Paste to date (Ctrl+V)</button>
+        <button class="toolbar-btn danger" onclick="deleteSelectedRows()">🗑 Delete selected</button>
         <button class="toolbar-btn" onclick="clearSelection()">✕ Deselect</button>
       </div>
 
@@ -245,8 +247,8 @@
   </div>
 
   <!-- EDIT CUSTOMER MODAL -->
-  <div class="modal-backdrop" id="modal-backdrop" onclick="closeModal()" style="display:none"></div>
-  <div class="modal" id="edit-cust-modal" style="display:none">
+  <div class="modal-backdrop" id="modal-backdrop" style="display:none"></div>
+  <div class="modal" id="edit-cust-modal" style="display:none" onclick="event.stopPropagation()">
     <div class="modal-title">Edit customer</div>
     <div style="margin-top:1rem">
       <label class="field-label">Name</label>
@@ -261,6 +263,21 @@
       <button class="btn-primary" onclick="saveCustomer()" style="flex:2;margin-top:0">Save</button>
     </div>
     <p style="font-size:12px;margin-top:0.5rem" id="ec-msg"></p>
+  </div>
+
+
+  <!-- PASTE DATE MODAL -->
+  <div class="modal" id="paste-date-modal" style="display:none" onclick="event.stopPropagation()">
+    <div class="modal-title">Move loads to date</div>
+    <p id="paste-modal-msg" style="font-size:13px;color:#666;margin:8px 0 12px"></p>
+    <div>
+      <label class="field-label">Target date</label>
+      <input type="date" id="paste-date-input" style="width:100%" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn-sm" onclick="closePasteModal()" style="flex:1;padding:9px">Cancel</button>
+      <button class="btn-primary" onclick="confirmPaste()" style="flex:2;margin-top:0;justify-content:center">Move loads</button>
+    </div>
   </div>
 
   <script src="admin.js"></script>
