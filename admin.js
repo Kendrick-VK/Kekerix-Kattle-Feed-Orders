@@ -53,7 +53,8 @@ async function init() {
 async function loadOrderLines() {
   try {
     const lines = await sb('order_lines?select=*,orders(id,customer_id,notes,submitted_at,customers(id,name,phone))&order=delivery_date.asc,load_number.asc');
-    allLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled') : [];
+    // Only show lines that have a load number — farmer-only orders belong on the Farmer Orders tab
+    allLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled' && l.load_number) : [];
     filteredLines = [...allLines];
   } catch(e) { console.error(e); }
 }
