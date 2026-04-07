@@ -6,6 +6,19 @@
   <title>Feed Orders — Admin</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="admin.css" />
+  <style>
+    .farmer-order-badge {
+      display: inline-block;
+      background: #FEF3C7;
+      color: #92400E;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 <body>
 
@@ -59,7 +72,7 @@
               <th style="width:95px">Date</th>
               <th style="width:130px">Product</th>
               <th style="width:115px">Load #</th>
-              <th style="width:140px">Customer</th>
+              <th style="width:160px">Customer</th>
               <th style="width:115px">Plant</th>
               <th style="width:130px">Trucker</th>
               <th style="width:50px">Loads</th>
@@ -145,10 +158,17 @@
       <div class="sheet-wrap">
         <table class="sheet-table">
           <thead>
-            <tr><th>Date</th><th>Farmer</th><th>Product</th><th>Loads needed</th><th></th></tr>
+            <tr>
+              <th>Date</th>
+              <th>Farmer</th>
+              <th>Product</th>
+              <th>Loads needed</th>
+              <th>Ordered</th>
+              <th></th>
+            </tr>
           </thead>
           <tbody id="orders-tbody">
-            <tr><td colspan="5" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            <tr><td colspan="6" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
       </div>
