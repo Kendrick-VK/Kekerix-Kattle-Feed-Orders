@@ -61,6 +61,12 @@ async function init() {
   renderMetrics();
   renderSheet();
   document.addEventListener('keydown', handleKeyboard);
+  // Commit active cell when clicking anywhere outside it
+  document.addEventListener('mousedown', e => {
+    if (!activeCell) return;
+    const td = activeCell.td;
+    if (!td.contains(e.target)) commitCell(true);
+  });
   // Backdrop click closes whichever modal is open
   document.getElementById('modal-backdrop').addEventListener('click', () => {
     if (document.getElementById('edit-cust-modal').style.display !== 'none') closeModal();
@@ -656,11 +662,48 @@ function startEdit(lineId, field) {
     input.value = currentVal;
   }
 
-  input.onblur   = () => commitCell(true);
   input.onkeydown = e => {
-    if (e.key==='Enter')  { e.preventDefault(); commitCell(true); }
-    if (e.key==='Tab')    { e.preventDefault(); commitCell(true); moveNext(lineId, field); }
-    if (e.key==='Escape') { td.classList.remove('cell-active'); renderSheet(); activeCell=null; }
+    if (e.key==='Enter') {
+      e.preventDefault();
+      commitCell(true);
+      // Move down to same field on next row
+      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+      if (idx >= 0 && idx < filteredLines.length - 1) {
+        setTimeout(() => startEdit(filteredLines[idx+1].id, field), 30);
+      }
+    } else if (e.key==='Tab') {
+      e.preventDefault();
+      commitCell(true);
+      if (e.shiftKey) movePrev(lineId, field);
+      else moveNext(lineId, field);
+    } else if (e.key==='Escape') {
+      activeCell = null;
+      td.classList.remove('cell-active');
+      restoreCell(td, allLines.find(l=>String(l.id)===String(lineId))||{}, field);
+    } else if (e.key==='ArrowRight' && (type==='text'||type==='number'||type==='decimal'||type==='customer')) {
+      // Only navigate if cursor is at end of input
+      if (input.selectionStart === input.value.length) {
+        e.preventDefault(); commitCell(true); moveNext(lineId, field);
+      }
+    } else if (e.key==='ArrowLeft' && (type==='text'||type==='number'||type==='decimal'||type==='customer')) {
+      if (input.selectionStart === 0) {
+        e.preventDefault(); commitCell(true); movePrev(lineId, field);
+      }
+    } else if (e.key==='ArrowDown') {
+      e.preventDefault();
+      commitCell(true);
+      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+      if (idx >= 0 && idx < filteredLines.length - 1) {
+        setTimeout(() => startEdit(filteredLines[idx+1].id, field), 30);
+      }
+    } else if (e.key==='ArrowUp') {
+      e.preventDefault();
+      commitCell(true);
+      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+      if (idx > 0) {
+        setTimeout(() => startEdit(filteredLines[idx-1].id, field), 30);
+      }
+    }
   };
 
   td.innerHTML = '';
@@ -750,6 +793,25 @@ function moveNext(lineId, currentField) {
   const idx = FIELD_ORDER.indexOf(currentField);
   if (idx < FIELD_ORDER.length - 1) {
     setTimeout(() => startEdit(lineId, FIELD_ORDER[idx+1]), 30);
+  } else {
+    // Wrap to first field of next row
+    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+    if (rowIdx >= 0 && rowIdx < filteredLines.length - 1) {
+      setTimeout(() => startEdit(filteredLines[rowIdx+1].id, FIELD_ORDER[0]), 30);
+    }
+  }
+}
+
+function movePrev(lineId, currentField) {
+  const idx = FIELD_ORDER.indexOf(currentField);
+  if (idx > 0) {
+    setTimeout(() => startEdit(lineId, FIELD_ORDER[idx-1]), 30);
+  } else {
+    // Wrap to last field of previous row
+    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+    if (rowIdx > 0) {
+      setTimeout(() => startEdit(filteredLines[rowIdx-1].id, FIELD_ORDER[FIELD_ORDER.length-1]), 30);
+    }
   }
 }
 
