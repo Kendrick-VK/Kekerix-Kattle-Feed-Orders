@@ -41,6 +41,13 @@ let selectedIds   = new Set();
 let undoBuffer    = [];   // [{rows: [...line objects], orderLinePayloads: [...]}]
 let undoTimer     = null;
 
+// Row highlight colors (stored in localStorage, keyed by line id)
+let rowColors = JSON.parse(localStorage.getItem('rowColors') || '{}');
+
+function saveRowColors() {
+  localStorage.setItem('rowColors', JSON.stringify(rowColors));
+}
+
 // Cut / paste & drag-to-date
 let cutIds        = new Set();   // ids currently cut (Ctrl+X)
 let dragRowId     = null;        // id of row being dragged (or null if multi)
@@ -260,9 +267,13 @@ function renderSheet() {
         : '';
 
       const isCut = cutIds.has(l.id);
+      const rowColor = rowColors[l.id] || '';
+      const rowBg = rowColor ? `background:${rowColor} !important;` : '';
       html += `
         <tr data-id="${l.id}" class="${rowClass}${isCut?' row-cut':''}" ondblclick="startEdit(${l.id},'notes')"
-            draggable="false">
+            draggable="false"
+            oncontextmenu="showColorMenu(event,${l.id})"
+            style="${rowBg}">
           <td class="col-rownum"
               onclick="toggleRowSelect(${l.id},event)"
               draggable="true"
@@ -348,6 +359,7 @@ function updateSelectionToolbar() {
     ct.textContent = `${selectedIds.size} row${selectedIds.size!==1?'s':''} selected`;
   } else {
     tb.style.display = 'none';
+    hideColorMenu();
   }
   // Show paste button only when there are cut rows
   if (pb) pb.style.display = cutIds.size > 0 ? 'flex' : 'none';
@@ -1108,6 +1120,91 @@ async function moveRowsToDate(ids, newDate) {
   } catch(e) {
     alert('Error moving rows: ' + e.message);
   }
+}
+
+
+// ── Row color highlight ───────────────────────────────
+const COLOR_OPTIONS = [
+  { label: 'None',        color: '' },
+  { label: 'Green',       color: '#c6efce' },
+  { label: 'Yellow',      color: '#ffeb9c' },
+  { label: 'Orange',      color: '#fce4d6' },
+  { label: 'Red',         color: '#ffc7ce' },
+  { label: 'Blue',        color: '#bdd7ee' },
+  { label: 'Purple',      color: '#e2d0f5' },
+];
+
+let colorMenuTargetId = null;
+
+function showColorMenu(e, lineId) {
+  e.preventDefault();
+  e.stopPropagation();
+  colorMenuTargetId = lineId;
+
+  // If right-clicking a selected row, menu applies to all selected
+  const applyIds = selectedIds.has(lineId) && selectedIds.size > 1
+    ? [...selectedIds]
+    : [lineId];
+
+  const menu = document.getElementById('color-menu');
+  menu.innerHTML = `
+    <div style="font-size:11px;color:#888;padding:4px 8px 6px;border-bottom:1px solid #e0e0e0;margin-bottom:4px">
+      ${applyIds.length > 1 ? `Color ${applyIds.length} rows` : 'Row color'}
+    </div>
+    ${COLOR_OPTIONS.map(opt => `
+      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${applyIds.join(',')}])">
+        <span class="color-swatch" style="background:${opt.color||'#fff'};border:1px solid ${opt.color?opt.color:'#ccc'}"></span>
+        ${opt.label}
+        ${applyIds.every(id => rowColors[id] === opt.color) ? ' ✓' : ''}
+      </div>`).join('')}
+  `;
+
+  // Position near cursor
+  const x = Math.min(e.clientX, window.innerWidth - 160);
+  const y = Math.min(e.clientY, window.innerHeight - 220);
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.style.display = 'block';
+
+  // Close on next click anywhere
+  setTimeout(() => document.addEventListener('click', hideColorMenu, { once: true }), 10);
+}
+
+function showColorMenuForSelected() {
+  if (!selectedIds.size) return;
+  const ids = [...selectedIds];
+  // Show menu centered on screen
+  const menu = document.getElementById('color-menu');
+  menu.innerHTML = `
+    <div style="font-size:11px;color:#888;padding:4px 8px 6px;border-bottom:1px solid #e0e0e0;margin-bottom:4px">
+      Color ${ids.length} row${ids.length!==1?'s':''}
+    </div>
+    ${COLOR_OPTIONS.map(opt => `
+      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${ids.join(',')}])">
+        <span class="color-swatch" style="background:${opt.color||'#fff'};border:1px solid ${opt.color?opt.color:'#ccc'}"></span>
+        ${opt.label}
+      </div>`).join('')}
+  `;
+  menu.style.left = '50%';
+  menu.style.top  = '40%';
+  menu.style.transform = 'translate(-50%,-50%)';
+  menu.style.display = 'block';
+  setTimeout(() => document.addEventListener('click', hideColorMenu, { once: true }), 10);
+}
+
+function hideColorMenu() {
+  const menu = document.getElementById('color-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function applyRowColor(color, ids) {
+  hideColorMenu();
+  ids.forEach(id => {
+    if (color === '') delete rowColors[id];
+    else rowColors[id] = color;
+  });
+  saveRowColors();
+  renderSheet();
 }
 
 // ── Helpers ───────────────────────────────────────────
