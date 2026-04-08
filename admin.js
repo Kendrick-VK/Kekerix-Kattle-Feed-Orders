@@ -245,6 +245,7 @@ function populateDynamicFilters() {
 
   const plantSel   = document.getElementById('filter-plant');
   const truckerSel = document.getElementById('filter-trucker');
+  if (!plantSel || !truckerSel) return;
   const curPlant   = plantSel.value;
   const curTrucker = truckerSel.value;
 
@@ -263,10 +264,10 @@ function clearFilters() {
 // ── Filters ───────────────────────────────────────────
 function applyFilters() {
   populateDynamicFilters();
-  const fp      = document.getElementById('filter-product').value;
-  const fpl     = document.getElementById('filter-plant').value;
-  const ft      = document.getElementById('filter-trucker').value;
-  const search  = document.getElementById('filter-search').value.toLowerCase();
+  const fp      = document.getElementById('filter-product')?.value || '';
+  const fpl     = document.getElementById('filter-plant')?.value || '';
+  const ft      = document.getElementById('filter-trucker')?.value || '';
+  const search  = (document.getElementById('filter-search')?.value || '').toLowerCase();
   const { monday, friday } = getWeekRange();
   const ws = monday.toISOString().split('T')[0];
   const we = friday.toISOString().split('T')[0];
@@ -289,7 +290,7 @@ function applyFilters() {
   });
 
   const countEl = document.getElementById('filter-count');
-  countEl.textContent = filteredLines.length !== allLines.filter(l => {
+  if (countEl) countEl.textContent = filteredLines.length !== allLines.filter(l => {
     const { monday, friday } = getWeekRange();
     return l.delivery_date >= monday.toISOString().split('T')[0] && l.delivery_date <= friday.toISOString().split('T')[0];
   }).length
