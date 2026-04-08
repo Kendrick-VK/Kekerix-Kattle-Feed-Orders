@@ -783,25 +783,29 @@ function startEdit(lineId, field) {
       cancelEdit();
     } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
       e.preventDefault();
+      const _f1 = field, _l1 = lineId;
       saveActiveCell();
-      moveRow(lineId, field, 1);
+      setTimeout(() => moveRow(_l1, _f1, 1), 20);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      const _f2 = field, _l2 = lineId;
       saveActiveCell();
-      moveRow(lineId, field, -1);
+      setTimeout(() => moveRow(_l2, _f2, -1), 20);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
+      const _f3 = field, _l3 = lineId;
       saveActiveCell();
-      moveCol(lineId, field, 1);
+      setTimeout(() => moveCol(_l3, _f3, 1), 20);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
+      const _f4 = field, _l4 = lineId;
       saveActiveCell();
-      moveCol(lineId, field, -1);
+      setTimeout(() => moveCol(_l4, _f4, -1), 20);
     } else if (e.key === 'Tab') {
       e.preventDefault();
+      const _f5 = field, _l5 = lineId, _shift = e.shiftKey;
       saveActiveCell();
-      if (e.shiftKey) moveCol(lineId, field, -1);
-      else moveCol(lineId, field, 1);
+      setTimeout(() => _shift ? moveCol(_l5, _f5, -1) : moveCol(_l5, _f5, 1), 20);
     }
   };
 
