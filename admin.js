@@ -72,8 +72,10 @@ async function init() {
 async function loadOrderLines() {
   try {
     const lines = await sb('order_lines?select=*,orders(id,customer_id,notes,submitted_at,customers(id,name,phone))&order=delivery_date.asc,load_number.asc');
-    // Only show lines that have a load number — farmer-only orders belong on the Farmer Orders tab
-    allLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled' && l.load_number) : [];
+    const savedLines = Array.isArray(lines) ? lines.filter(l => l.status !== 'Fulfilled' && l.load_number) : [];
+    // Keep any unsaved _isNew rows that are currently being edited
+    const newRows = allLines.filter(l => l._isNew);
+    allLines = [...savedLines, ...newRows];
     filteredLines = [...allLines];
   } catch(e) { console.error(e); }
 }
@@ -185,6 +187,8 @@ function applyFilters() {
   const we = friday.toISOString().split('T')[0];
 
   filteredLines = allLines.filter(l => {
+    // Always show unsaved new rows regardless of filters
+    if (l._isNew) return true;
     if (l.delivery_date < ws || l.delivery_date > we) return false;
     if (fp  && l.product !== fp)  return false;
     if (fpl && l.plant   !== fpl) return false;
@@ -367,7 +371,18 @@ function renderSheet() {
         <tr class="blank-row" data-date="${dateStr}">
           <td class="col-rownum" style="color:#ccc">${existingCount + b + 1}</td>
           <td class="col-check"></td>
-          <td colspan="12" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','delivery_date')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','loads_on_date')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
+          <td></td>
         </tr>`;
     }
   });
