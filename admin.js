@@ -521,6 +521,11 @@ function startEdit(lineId, field) {
   if (type === 'select-product') {
     input = document.createElement('select');
     input.className = 'cell-input';
+    // Blank option so it doesn't auto-select Wet distillers on empty cells
+    const blankOpt = document.createElement('option');
+    blankOpt.value = ''; blankOpt.textContent = '— pick product —';
+    if (!currentVal) blankOpt.selected = true;
+    input.appendChild(blankOpt);
     PRODUCTS.forEach(p => {
       const o = document.createElement('option');
       o.textContent = p;
@@ -1297,8 +1302,8 @@ async function addBlankRow(dateStr) {
       method: 'POST',
       body: JSON.stringify({
         delivery_date: dateStr,
-        product: PRODUCTS[0],
-        load_number: '',
+        product: null,
+        load_number: null,
         loads_on_date: 1,
         total_loads: 1,
         status: 'Scheduled'
