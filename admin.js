@@ -52,6 +52,57 @@ function saveRowColors() {
   localStorage.setItem('rowColors', JSON.stringify(rowColors));
 }
 
+// ── Undo/redo history ────────────────────────────────
+// Separate from the delete-undo system — tracks cell edits
+let editHistory   = [];  // [{lineId, field, oldVal, newVal}]
+let editFuture    = [];  // for redo
+
+function pushHistory(entry) {
+  editHistory.push(entry);
+  editFuture = [];  // clear redo stack on new change
+  updateUndoRedoButtons();
+}
+
+async function undoEdit() {
+  if (!editHistory.length) return;
+  const { lineId, field, oldVal } = editHistory.pop();
+  editFuture.push({ lineId, field, oldVal: allLines.find(l=>String(l.id)===String(lineId))?.[field], newVal: oldVal });
+  await applyHistoryValue(lineId, field, oldVal);
+  updateUndoRedoButtons();
+}
+
+async function redoEdit() {
+  if (!editFuture.length) return;
+  const { lineId, field, newVal } = editFuture.pop();
+  editHistory.push({ lineId, field, oldVal: allLines.find(l=>String(l.id)===String(lineId))?.[field], newVal });
+  await applyHistoryValue(lineId, field, newVal);
+  updateUndoRedoButtons();
+}
+
+async function applyHistoryValue(lineId, field, val) {
+  const line = allLines.find(l => String(l.id) === String(lineId));
+  if (!line) return;
+  line[field] = val;
+  // Update cell display
+  const td = getLineTd(lineId, field);
+  if (td) restoreCell(td, line, field);
+  // Save to Supabase
+  try {
+    await sb('order_lines?id=eq.'+lineId, {
+      method:'PATCH', headers:{'Prefer':'return=minimal'},
+      body: JSON.stringify({ [field]: val })
+    });
+  } catch(e) { console.error('Undo/redo save error:', e); }
+  renderMetrics();
+}
+
+function updateUndoRedoButtons() {
+  const undoBtn = document.getElementById('undo-edit-btn');
+  const redoBtn = document.getElementById('redo-edit-btn');
+  if (undoBtn) undoBtn.disabled = !editHistory.length;
+  if (redoBtn) redoBtn.disabled = !editFuture.length;
+}
+
 // Cut / paste & drag-to-date
 let cutIds        = new Set();   // ids currently cut (Ctrl+X)
 let dragRowId     = null;        // id of row being dragged (or null if multi)
@@ -67,8 +118,7 @@ async function init() {
   // Commit active cell when clicking anywhere outside it
   document.addEventListener('mousedown', e => {
     if (!activeCell) return;
-    const td = activeCell.td;
-    if (!td.contains(e.target)) commitCell(true);
+    if (!activeCell.td.contains(e.target)) saveActiveCell();
   });
 
   // Event delegation for delete buttons — works even after partial cell restores
@@ -307,7 +357,6 @@ function renderSheet() {
             <td class="col-rownum" style="color:#ccc">${b + 1}</td>
             <td class="col-check"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','delivery_date')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
@@ -421,7 +470,6 @@ function renderSheet() {
           <td class="col-rownum" style="color:#ccc">${existingCount + b + 1}</td>
           <td class="col-check"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','delivery_date')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
@@ -598,56 +646,85 @@ function hideToast() {
 }
 
 
-// ── Restore a single cell to view state (used when cancelling edit) ──
+// ── Restore a single cell to view state ──────────────
 function restoreCell(td, line, field) {
+  if (!line || !line.id) return;
+  const lid = line.id;
   const farmer  = line.customer_name||(line.orders?.customers?.name)||'';
   const tons     = line.tons     != null ? line.tons     : '';
   const markup   = line.markup   != null ? line.markup   : '';
   const commission = line.commission != null ? line.commission : '';
 
   if (field === 'commission') {
-    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${line.id}','commission')">${commission!==''?('$'+commission):'—'}</div>`;
+    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div>`;
     return;
   }
   const val = line[field];
   const isEmpty = val == null || val === '';
   let display = '';
-  if (field === 'delivery_date') display = formatDate(val);
-  else if (field === 'customer_name') display = farmer || '—';
+  if (field === 'customer_name') display = farmer || '—';
   else if (field === 'tons') display = tons !== '' ? String(tons) : '—';
   else if (field === 'markup') display = markup !== '' ? ('$'+markup) : '—';
   else if (field === 'loads_on_date') display = String(val || 1);
-  else display = val || '—';
-  td.innerHTML = `<div class="cell-view${isEmpty?' empty':''}" onclick="startEdit('${line.id}','${field}')">${display}</div>`;
+  else display = (val != null && val !== '') ? String(val) : '—';
+  const hasFill = !isEmpty && field !== 'loads_on_date';
+  td.innerHTML = `<div class="cell-view${isEmpty?' empty':''}" onclick="startEdit('${lid}','${field}')">${display}</div>${hasFill?'<span class="fill-handle" title="Drag to fill down"></span>':''}`;
 }
 
 // ── Inline editing ────────────────────────────────────
-function startEdit(lineId, field) {
-  // Cancel any active cell without re-rendering the whole sheet
-  if (activeCell) {
-    const { td: oldTd, lineId: oldId, field: oldField, input: oldInput } = activeCell;
-    activeCell = null;
-    oldTd.classList.remove('cell-active');
-    // Restore the cell display without full re-render
-    const oldLine = allLines.find(l => String(l.id) === String(oldId));
-    if (oldLine) restoreCell(oldTd, oldLine, oldField);
-  }
+// Google Sheets-style: click to select, type to edit, arrows move cells
+
+let activeTd   = null;  // the currently focused td (selected but not editing)
+let activeCell = null;  // { td, lineId, field, type, input, oldVal } when actively typing
+
+function getLineTd(lineId, field) {
   const tr = document.querySelector(`tr[data-id="${lineId}"]`);
-  if (!tr) return;
-  const colIdx = COL_MAP[field];
-  const td = tr.children[colIdx];
+  if (!tr) return null;
+  return tr.children[COL_MAP[field]] || null;
+}
+
+// Select a cell (shows blue outline, ready to type)
+function selectCell(lineId, field) {
+  // Commit any open edit first
+  if (activeCell) saveActiveCell();
+
+  // Deselect old
+  if (activeTd) activeTd.classList.remove('cell-selected');
+
+  const td = getLineTd(lineId, field);
   if (!td) return;
-  td.classList.add('cell-active');
+  activeTd = td;
+  activeTd.classList.add('cell-selected');
+  activeTd._lineId = String(lineId);
+  activeTd._field  = field;
+  // Focus the td so keyboard events fire
+  td.setAttribute('tabindex', '-1');
+  td.focus({ preventScroll: false });
+}
+
+// Open a cell for editing (puts input inside td)
+function startEdit(lineId, field) {
+  if (activeCell && String(activeCell.lineId) === String(lineId) && activeCell.field === field) return;
+  if (activeCell) saveActiveCell();
+
+  // Select this cell first
+  if (activeTd) activeTd.classList.remove('cell-selected');
+  const td = getLineTd(lineId, field);
+  if (!td) return;
+  activeTd = td;
 
   const line = allLines.find(l => String(l.id) === String(lineId));
-  const currentVal = line ? (line[field] != null ? line[field] : '') : '';
+  if (!line) return;
+  const currentVal = line[field] != null ? line[field] : '';
   const type = FIELD_TYPE[field];
   let input;
+
+  td.classList.remove('cell-selected');
+  td.classList.add('cell-active');
 
   if (type === 'select-product') {
     input = document.createElement('select');
     input.className = 'cell-input';
-    // Blank option so it doesn't auto-select Wet distillers on empty cells
     const blankOpt = document.createElement('option');
     blankOpt.value = ''; blankOpt.textContent = '— pick product —';
     if (!currentVal) blankOpt.selected = true;
@@ -674,169 +751,154 @@ function startEdit(lineId, field) {
     input.className = 'cell-input';
     input.type = 'text';
     input.value = currentVal;
-    // Build/reuse datalist
     let dl = document.getElementById('customer-datalist');
-    if (!dl) {
-      dl = document.createElement('datalist');
-      dl.id = 'customer-datalist';
-      document.body.appendChild(dl);
-    }
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'customer-datalist'; document.body.appendChild(dl); }
     dl.innerHTML = allCustomers.map(c => `<option value="${c.name}">`).join('');
     input.setAttribute('list', 'customer-datalist');
   } else {
     input = document.createElement('input');
     input.className = 'cell-input';
-    input.type = type==='date'?'date':type==='number'||type==='decimal'?'number':'text';
+    input.type = type==='number'||type==='decimal' ? 'number' : 'text';
     if (type==='decimal') input.step = '0.01';
     if (type==='number')  input.min  = 1;
     input.value = currentVal;
   }
 
   input.onkeydown = e => {
-    if (e.key==='Enter') {
+    if (e.key === 'Escape') {
       e.preventDefault();
-      commitCell(true);
-      // Move down to same field on next row
-      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-      if (idx >= 0 && idx < filteredLines.length - 1) {
-        setTimeout(() => startEdit(filteredLines[idx+1].id, field), 30);
-      }
-    } else if (e.key==='Tab') {
+      cancelEdit();
+    } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
       e.preventDefault();
-      commitCell(true);
-      if (e.shiftKey) movePrev(lineId, field);
-      else moveNext(lineId, field);
-    } else if (e.key==='Escape') {
-      activeCell = null;
-      td.classList.remove('cell-active');
-      restoreCell(td, allLines.find(l=>String(l.id)===String(lineId))||{}, field);
-    } else if (e.key==='ArrowRight') {
-      e.preventDefault(); commitCell(true); moveNext(lineId, field);
-    } else if (e.key==='ArrowLeft') {
-      e.preventDefault(); commitCell(true); movePrev(lineId, field);
-    } else if (e.key==='ArrowDown') {
+      saveActiveCell();
+      moveRow(lineId, field, 1);
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      commitCell(true);
-      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-      if (idx >= 0 && idx < filteredLines.length - 1) {
-        setTimeout(() => startEdit(filteredLines[idx+1].id, field), 30);
-      }
-    } else if (e.key==='ArrowUp') {
+      saveActiveCell();
+      moveRow(lineId, field, -1);
+    } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      commitCell(true);
-      const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-      if (idx > 0) {
-        setTimeout(() => startEdit(filteredLines[idx-1].id, field), 30);
-      }
+      saveActiveCell();
+      moveCol(lineId, field, 1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      saveActiveCell();
+      moveCol(lineId, field, -1);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      saveActiveCell();
+      if (e.shiftKey) moveCol(lineId, field, -1);
+      else moveCol(lineId, field, 1);
     }
   };
 
   td.innerHTML = '';
   td.appendChild(input);
   input.focus();
-  if (type !== 'select-product' && type !== 'date') input.select();
-  activeCell = { td, lineId, field, type, input, oldVal: currentVal };
+  if (type !== 'select-product') { input.select(); }
+  activeCell = { td, lineId: String(lineId), field, type, input, oldVal: currentVal };
 }
 
-async function commitCell(save) {
+function cancelEdit() {
+  if (!activeCell) return;
+  const { td, lineId, field } = activeCell;
+  activeCell = null;
+  td.classList.remove('cell-active');
+  const line = allLines.find(l => String(l.id) === String(lineId));
+  if (line) restoreCell(td, line, field);
+}
+
+async function saveActiveCell() {
   if (!activeCell) return;
   const { td, lineId, field, type, input, oldVal } = activeCell;
   activeCell = null;
   td.classList.remove('cell-active');
 
   let newVal;
-  if (type==='number')        newVal = parseInt(input.value) || 1;
-  else if (type==='decimal')  newVal = input.value !== '' ? parseFloat(parseFloat(input.value).toFixed(2)) : null;
-  else                        newVal = input.value.trim();
+  if (type==='number')       newVal = parseInt(input.value) || 1;
+  else if (type==='decimal') newVal = input.value !== '' ? parseFloat(parseFloat(input.value).toFixed(2)) : null;
+  else                       newVal = input.value.trim();
 
   const line = allLines.find(l => String(l.id) === String(lineId));
-  if (!line) { renderSheet(); return; }
+  if (!line) return;
 
   const strNew = newVal != null ? String(newVal) : '';
   const strOld = oldVal != null ? String(oldVal) : '';
+  const changed = strNew !== strOld;
+
   line[field] = newVal;
+  restoreCell(td, line, field);  // Update cell display immediately
 
-  if (save && strNew !== strOld) {
-    const updatePayload = { [field]: newVal };
-    if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
+  if (changed) {
+    // Push to undo/redo history
+    pushHistory({ lineId, field, oldVal, newVal });
 
-    // Decrement farmer order when customer_name is assigned
     if (field === 'customer_name' && newVal) {
-      const product = line.product;
-      const date    = line.delivery_date;
-      if (product && date) await decrementFarmerOrder(newVal, product, date);
+      if (line.product && line.delivery_date) await decrementFarmerOrder(newVal, line.product, line.delivery_date);
     }
-
-    // Also decrement when product or date changes and customer is already set
     if ((field==='product'||field==='delivery_date') && line.customer_name) {
       await decrementFarmerOrder(line.customer_name, line.product, line.delivery_date);
     }
 
     try {
       if (line._isNew) {
-        // First time saving this row — do an INSERT with all current field values
         const insertPayload = {
-          delivery_date: line.delivery_date,
-          product:       line.product   || null,
-          load_number:   line.load_number || null,
-          customer_name: line.customer_name || null,
-          plant:         line.plant     || null,
-          hauler:        line.hauler    || null,
-          loads_on_date: line.loads_on_date || 1,
-          tons:          line.tons      || null,
-          markup:        line.markup    || null,
-          commission:    line.commission || null,
-          notes:         line.notes     || null,
-          status:        'Scheduled',
-          total_loads:   1,
-          [field]:       newVal
+          delivery_date: line.delivery_date, product: line.product||null,
+          load_number: line.load_number||null, customer_name: line.customer_name||null,
+          plant: line.plant||null, hauler: line.hauler||null,
+          loads_on_date: line.loads_on_date||1, tons: line.tons||null,
+          markup: line.markup||null, commission: line.commission||null,
+          notes: line.notes||null, status:'Scheduled', total_loads:1, [field]: newVal
         };
-        const result = await sb('order_lines', { method: 'POST', body: JSON.stringify(insertPayload) });
+        const result = await sb('order_lines', { method:'POST', body:JSON.stringify(insertPayload) });
         const saved = Array.isArray(result) ? result[0] : result;
         if (saved && saved.id) {
-          // Swap temp id for real id in allLines
-          const idx = allLines.findIndex(l => l.id === lineId);
+          const idx = allLines.findIndex(l => String(l.id) === String(lineId));
           if (idx >= 0) {
+            const oldTempId = allLines[idx].id;
             allLines[idx] = { ...allLines[idx], ...saved, _isNew: false };
+            // Update the tr data-id so future lookups work
+            const tr = document.querySelector(`tr[data-id="${oldTempId}"]`);
+            if (tr) tr.dataset.id = saved.id;
+            if (activeTd) { activeTd._lineId = String(saved.id); }
           }
         }
       } else {
+        const updatePayload = { [field]: newVal };
+        if (field==='hauler' && newVal && !oldVal) updatePayload.status = 'Sent out';
         await sb('order_lines?id=eq.'+lineId, {
-          method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+          method:'PATCH', headers:{'Prefer':'return=minimal'},
           body: JSON.stringify(updatePayload)
         });
       }
       populateDynamicFilters();
     } catch(e) { console.error('Save error:', e); }
-  }
 
-  renderMetrics();
-  renderSheet();
-}
-
-function moveNext(lineId, currentField) {
-  const idx = FIELD_ORDER.indexOf(currentField);
-  if (idx < FIELD_ORDER.length - 1) {
-    setTimeout(() => startEdit(lineId, FIELD_ORDER[idx+1]), 30);
-  } else {
-    // Wrap to first field of next row
-    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-    if (rowIdx >= 0 && rowIdx < filteredLines.length - 1) {
-      setTimeout(() => startEdit(filteredLines[rowIdx+1].id, FIELD_ORDER[0]), 30);
-    }
+    renderMetrics();
   }
 }
 
-function movePrev(lineId, currentField) {
-  const idx = FIELD_ORDER.indexOf(currentField);
-  if (idx > 0) {
-    setTimeout(() => startEdit(lineId, FIELD_ORDER[idx-1]), 30);
-  } else {
-    // Wrap to last field of previous row
+function moveRow(lineId, field, dir) {
+  const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+  const next = filteredLines[idx + dir];
+  if (next) startEdit(next.id, field);
+}
+
+function moveCol(lineId, field, dir) {
+  const idx = FIELD_ORDER.indexOf(field);
+  const nextField = FIELD_ORDER[idx + dir];
+  if (nextField) {
+    startEdit(lineId, nextField);
+  } else if (dir > 0) {
+    // Wrap to next row first field
     const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-    if (rowIdx > 0) {
-      setTimeout(() => startEdit(filteredLines[rowIdx-1].id, FIELD_ORDER[FIELD_ORDER.length-1]), 30);
-    }
+    const next = filteredLines[rowIdx + 1];
+    if (next) startEdit(next.id, FIELD_ORDER[0]);
+  } else {
+    // Wrap to prev row last field
+    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
+    const prev = filteredLines[rowIdx - 1];
+    if (prev) startEdit(prev.id, FIELD_ORDER[FIELD_ORDER.length-1]);
   }
 }
 
@@ -1385,6 +1447,12 @@ function handleKeyboard(e) {
   // Don't intercept when typing in an input
   if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
 
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault(); undoEdit(); return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+    e.preventDefault(); redoEdit(); return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
     e.preventDefault();
     cutSelectedRows();
@@ -1394,6 +1462,7 @@ function handleKeyboard(e) {
     if (cutIds.size) openPasteModal();
   }
   if (e.key === 'Escape') {
+    if (activeCell) { cancelEdit(); return; }
     if (cutIds.size) { cutIds.clear(); renderSheet(); }
   }
 }
