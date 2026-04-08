@@ -22,10 +22,11 @@ const COL_MAP = {
 const FIELD_ORDER = ['notes','delivery_date','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
 const FIELD_TYPE = {
   notes:'text', delivery_date:'date', product:'select-product', load_number:'text',
-  customer_name:'customer', plant:'text', hauler:'text',
+  customer_name:'customer', plant:'select-plant', hauler:'text',
   loads_on_date:'number', tons:'decimal', markup:'decimal', commission:'decimal'
 };
 
+let allPlants     = [];
 let allLines      = [];
 let filteredLines = [];
 let allOrders     = [];
@@ -56,7 +57,7 @@ let dragOverDate  = null;        // date string currently highlighted
 // ── Init ──────────────────────────────────────────────
 async function init() {
   renderWeekLabel();
-  await Promise.all([loadOrderLines(), loadOrders(), loadCustomers()]);
+  await Promise.all([loadOrderLines(), loadOrders(), loadCustomers(), loadPlants()]);
   renderMetrics();
   renderSheet();
   document.addEventListener('keydown', handleKeyboard);
@@ -96,6 +97,24 @@ async function loadCustomers() {
   } catch(e) { console.error(e); }
 }
 
+async function loadPlants() {
+  try {
+    const data = await sb('plants?order=name.asc');
+    allPlants = Array.isArray(data) ? data : [];
+    populatePlantDropdowns();
+  } catch(e) { console.error('loadPlants error:', e); }
+}
+
+function populatePlantDropdowns() {
+  // Entry form plant dropdown
+  const entryPlant = document.getElementById('entry-plant');
+  if (entryPlant) {
+    const cur = entryPlant.value;
+    entryPlant.innerHTML = '<option value="">Select plant...</option>' +
+      allPlants.map(p => `<option value="${p.name}"${p.name===cur?' selected':''}>${p.name}</option>`).join('');
+  }
+}
+
 // ── Week nav ──────────────────────────────────────────
 function getWeekRange() {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -118,12 +137,13 @@ function todayWeek() { weekOffset=0;  renderWeekLabel(); applyFilters(); }
 
 // ── Tabs ──────────────────────────────────────────────
 function showAdminTab(tab) {
-  ['loads','entry','orders','customers'].forEach(t => {
+  ['loads','entry','orders','customers','plants'].forEach(t => {
     document.getElementById('panel-'+t).style.display = t===tab?'block':'none';
     document.getElementById('tab-'+t).classList.toggle('active', t===tab);
   });
   if (tab==='orders')    renderOrdersTable();
   if (tab==='customers') renderCustomersTable();
+  if (tab==='plants')    renderPlantsTable();
 }
 
 // ── Dynamic filter dropdowns ──────────────────────────
@@ -225,7 +245,32 @@ function renderSheet() {
   if (!tbody) return;
 
   if (!filteredLines.length) {
-    tbody.innerHTML = '<tr><td colspan="14" class="table-empty">No loads found for this week.</td></tr>';
+    // Show day headers with add buttons even when no loads
+    const { monday } = getWeekRange();
+    let html = '';
+    for (let d = 0; d < 5; d++) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + d);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayName = date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+      html += `<tr class="date-row" data-date="${dateStr}"
+          ondragover="dateDragOver(event,'${dateStr}')"
+          ondragleave="dateDragLeave(event)"
+          ondrop="dateDrop(event,'${dateStr}')">
+          <td colspan="14" style="display:flex;align-items:center;justify-content:space-between">
+            <span>${dayName} — 0 loads</span>
+            <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
+          </td></tr>`;
+      for (let b = 0; b < 30; b++) {
+        html += `
+          <tr class="blank-row" data-date="${dateStr}">
+            <td class="col-rownum" style="color:#ccc">${b + 1}</td>
+            <td class="col-check"></td>
+            <td colspan="12" onclick="addBlankRow('${dateStr}')" style="cursor:cell"></td>
+          </tr>`;
+      }
+    }
+    tbody.innerHTML = html;
     updateSelectionToolbar();
     return;
   }
@@ -248,7 +293,15 @@ function renderSheet() {
         ondragover="dateDragOver(event,'${dateStr}')"
         ondragleave="dateDragLeave(event)"
         ondrop="dateDrop(event,'${dateStr}')">
-        <td colspan="14">${dayName} — ${count} load${count!==1?'s':''}</td></tr>`;
+        <td colspan="14" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${dayName} — ${count} load${count!==1?'s':''}</span>
+          <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
+        </td></tr>`;
+
+    // Pad to minimum 30 visible rows with blank add-rows
+    const MIN_ROWS = 30;
+    const existingCount = grouped[dateStr].length;
+    const blankCount = Math.max(0, MIN_ROWS - existingCount);
 
     grouped[dateStr].forEach(l => {
       const farmer   = l.customer_name||(l.orders?.customers?.name)||'';
@@ -296,6 +349,16 @@ function renderSheet() {
         </tr>`;
       rowNum++;
     });
+
+    // Add blank placeholder rows to reach minimum 30
+    for (let b = 0; b < blankCount; b++) {
+      html += `
+        <tr class="blank-row" data-date="${dateStr}">
+          <td class="col-rownum" style="color:#ccc">${existingCount + b + 1}</td>
+          <td class="col-check"></td>
+          <td colspan="12" onclick="addBlankRow('${dateStr}')" style="cursor:cell"></td>
+        </tr>`;
+    }
   });
 
   tbody.innerHTML = html;
@@ -464,6 +527,19 @@ function startEdit(lineId, field) {
       if (p === currentVal) o.selected = true;
       input.appendChild(o);
     });
+  } else if (type === 'select-plant') {
+    input = document.createElement('select');
+    input.className = 'cell-input';
+    const blank = document.createElement('option');
+    blank.value = ''; blank.textContent = '—';
+    if (!currentVal) blank.selected = true;
+    input.appendChild(blank);
+    allPlants.forEach(p => {
+      const o = document.createElement('option');
+      o.textContent = p.name;
+      if (p.name === currentVal) o.selected = true;
+      input.appendChild(o);
+    });
   } else if (type === 'customer') {
     input = document.createElement('input');
     input.className = 'cell-input';
@@ -630,7 +706,12 @@ function renderEntryTable() {
         <input class="entry-input" type="text" id="entry-loadnum-${i}" value="${r.load_number}" onchange="updateImportRow(${i},'load_number',this.value)" />
         <div class="drag-handle" title="Drag to fill sequence" onmousedown="startDragFill(event,${i})" ontouchstart="startDragFill(event,${i})">▶</div>
       </td>
-      <td style="padding:4px 6px"><input class="entry-input" type="text" value="${r.plant}" placeholder="Plant" onchange="updateImportRow(${i},'plant',this.value)" /></td>
+      <td style="padding:4px 6px">
+        <select class="entry-input" onchange="updateImportRow(${i},'plant',this.value)">
+          <option value="">Select plant...</option>
+          ${allPlants.map(p => `<option value="${p.name}"${r.plant===p.name?' selected':''}>${p.name}</option>`).join('')}
+        </select>
+      </td>
       <td style="padding:4px 6px">
         <select class="entry-input" onchange="updateImportRow(${i},'product',this.value)">
           ${PRODUCTS.map(p=>`<option${r.product===p?' selected':''}>${p}</option>`).join('')}
@@ -1205,6 +1286,84 @@ function applyRowColor(color, ids) {
   });
   saveRowColors();
   renderSheet();
+}
+
+
+
+// ── Add blank row ─────────────────────────────────────
+async function addBlankRow(dateStr) {
+  try {
+    const result = await sb('order_lines', {
+      method: 'POST',
+      body: JSON.stringify({
+        delivery_date: dateStr,
+        product: PRODUCTS[0],
+        load_number: '',
+        loads_on_date: 1,
+        total_loads: 1,
+        status: 'Scheduled'
+      })
+    });
+    const newLine = Array.isArray(result) ? result[0] : result;
+    if (!newLine || !newLine.id) throw new Error('Failed to create row');
+    allLines.push(newLine);
+    applyFilters();
+    // Auto-focus the load number cell on the new row
+    setTimeout(() => startEdit(newLine.id, 'load_number'), 80);
+  } catch(e) { alert('Error adding row: ' + e.message); }
+}
+
+// ── Plants tab ────────────────────────────────────────
+function renderPlantsTable() {
+  const tbody = document.getElementById('plants-tbody');
+  if (!tbody) return;
+  if (!allPlants.length) {
+    tbody.innerHTML = '<tr><td colspan="2" class="table-empty">No plants yet. Add one below.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allPlants.map(p => `
+    <tr>
+      <td style="padding:7px 10px">${p.name}</td>
+      <td style="padding:7px 10px">
+        <button class="del-btn" data-pid="${p.id}">Remove</button>
+      </td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.del-btn[data-pid]').forEach(btn => {
+    btn.onclick = () => deletePlant(parseInt(btn.dataset.pid));
+  });
+}
+
+async function addPlant() {
+  const name = document.getElementById('new-plant-name').value.trim();
+  const msg  = document.getElementById('plant-msg');
+  if (!name) { msg.style.color='red'; msg.textContent='Enter a plant name.'; return; }
+  if (allPlants.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    msg.style.color='red'; msg.textContent=name+' already exists.'; return;
+  }
+  try {
+    const result = await sb('plants', { method:'POST', body:JSON.stringify({name}) });
+    if (result && result.code) throw new Error(result.message||'Error');
+    document.getElementById('new-plant-name').value = '';
+    msg.style.color='green'; msg.textContent = name+' added.';
+    await loadPlants();
+    renderPlantsTable();
+  } catch(e) { msg.style.color='red'; msg.textContent='Error: '+e.message; }
+}
+
+async function deletePlant(id) {
+  const plant = allPlants.find(p => p.id === id);
+  const name = plant ? plant.name : 'this plant';
+  if (!confirm('Remove ' + name + '?')) return;
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/plants?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' }
+    });
+    if (!res.ok) { alert('Error removing plant.'); return; }
+    allPlants = allPlants.filter(p => p.id !== id);
+    populatePlantDropdowns();
+    renderPlantsTable();
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 // ── Helpers ───────────────────────────────────────────
