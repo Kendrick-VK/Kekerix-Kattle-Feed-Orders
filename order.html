@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Feed Order</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .farmer-banner {
+      background: #1a73e8;
+      color: #fff;
+      padding: 14px 20px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .farmer-banner span {
+      font-size: 13px;
+      font-weight: 400;
+      opacity: 0.85;
+      display: block;
+      margin-top: 2px;
+    }
+    .not-found {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #666;
+    }
+    .not-found h2 { color: #c5221f; margin-bottom: 0.5rem; }
+    .success-screen {
+      text-align: center;
+      padding: 3rem 1rem;
+    }
+    .success-screen .checkmark {
+      font-size: 56px;
+      margin-bottom: 1rem;
+    }
+    .success-screen h2 { font-size: 22px; margin-bottom: 0.5rem; }
+    .success-screen p { color: #666; font-size: 14px; margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+  <div id="farmer-banner" class="farmer-banner" style="display:none">
+    Loading...
+  </div>
+
+  <div class="container">
+
+    <!-- NOT FOUND STATE -->
+    <div id="not-found" class="not-found" style="display:none">
+      <h2>Link not found</h2>
+      <p>This order link isn't valid. Ask Kendrick for your personal link.</p>
+    </div>
+
+    <!-- SUCCESS STATE -->
+    <div id="success-screen" class="success-screen" style="display:none">
+      <div class="checkmark">✅</div>
+      <h2>Order submitted!</h2>
+      <p>Your order has been sent. Kendrick will be in touch.</p>
+      <button class="btn-primary" onclick="resetForm()" style="width:auto;padding:10px 28px">Submit another order</button>
+    </div>
+
+    <!-- ORDER FORM -->
+    <div id="order-form" style="display:none">
+      <div class="steps">
+        <div class="step active" id="step1-ind">1. Products</div>
+        <div class="step" id="step2-ind">2. Loads &amp; days</div>
+        <div class="step" id="step3-ind">3. Review</div>
+      </div>
+
+      <!-- STEP 1: Pick products -->
+      <div id="step1">
+        <div class="card">
+          <div class="form-row" style="margin-bottom:0">
+            <label>Select all products you need this order</label>
+            <div class="product-grid" id="product-chips" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="goStep(2)">Next — set loads &amp; days</button>
+      </div>
+
+      <!-- STEP 2: Assign loads to days -->
+      <div id="step2" style="display:none">
+        <div id="product-blocks"></div>
+        <div style="display:flex;gap:8px;margin-top:0.5rem">
+          <button class="btn-sm" onclick="goStep(1)" style="flex:1;padding:9px">Back</button>
+          <button class="btn-primary" onclick="goStep(3)" style="flex:3">Review order</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Review & notes -->
+      <div id="step3" style="display:none">
+        <div class="card" id="review-card"></div>
+        <div class="card" style="margin-top:0.5rem">
+          <div class="form-row" style="margin-bottom:0">
+            <label>Notes (optional)</label>
+            <textarea id="f-notes" rows="2" placeholder="Any special instructions..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="goStep(2)" style="flex:1;padding:9px">Back</button>
+          <button class="btn-primary" id="submit-btn" onclick="submitOrder()" style="flex:3">Submit order</button>
+        </div>
+        <p class="note" id="form-msg" style="margin-top:8px"></p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://gghfgkzkgzfurbhwdbgv.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnaGZna3prZ3pmdXJiaHdkYmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNDA3NjEsImV4cCI6MjA5MDgxNjc2MX0.Bn4mwiEbvlkPySs8ewZiH4NGi_2k6_Yciv1tscvW20o';
+
+    const sb = (path, opts = {}) => fetch(SUPABASE_URL + '/rest/v1/' + path, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+        ...opts.headers
+      },
+      ...opts
+    }).then(r => r.json());
+
+    const PRODUCTS = [
+      'Wet distillers', 'Modified distillers', 'Dry distillers',
+      'Loosehulls', 'Soyhull pellets', 'Syrup', 'Corn screenings', 'Gluten'
+    ];
+
+    let farmer = null; // { id, name, phone }
+    let selectedProducts = [];
+    let productLoads = {};
+    let productTotals = {};
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const farmerId = params.get('id');
+
+      if (!farmerId) { showNotFound(); return; }
+
+      try {
+        const data = await sb('customers?id=eq.' + farmerId);
+        if (!Array.isArray(data) || !data.length) { showNotFound(); return; }
+        farmer = data[0];
+        showForm();
+      } catch(e) {
+        showNotFound();
+      }
+    }
+
+    function showNotFound() {
+      document.getElementById('not-found').style.display = 'block';
+    }
+
+    function showForm() {
+      document.getElementById('farmer-banner').style.display = 'block';
+      document.getElementById('farmer-banner').innerHTML =
+        farmer.name + '<span>Kekerix Kattle Feed Orders</span>';
+      document.getElementById('order-form').style.display = 'block';
+      document.title = farmer.name + ' — Feed Order';
+      buildProductChips();
+    }
+
+    function goStep(n) {
+      if (n === 2) {
+        if (!selectedProducts.length) { alert('Please select at least one product.'); return; }
+        buildProductBlocks();
+      }
+      if (n === 3) {
+        // Validate all products have matching totals
+        let errors = [];
+        selectedProducts.forEach(p => {
+          const total = parseInt(productTotals[p]) || 0;
+          const assigned = getTotalAssigned(p);
+          if (total === 0) errors.push('Enter a total load count for ' + p + '.');
+          else if (assigned !== total) errors.push(p + ': ' + assigned + ' of ' + total + ' loads assigned.');
+        });
+        if (errors.length) { alert(errors[0]); return; }
+        buildReview();
+      }
+      [1, 2, 3].forEach(i => {
+        document.getElementById('step' + i).style.display = i === n ? 'block' : 'none';
+        document.getElementById('step' + i + '-ind').className =
+          'step' + (i === n ? ' active' : i < n ? ' done' : '');
+      });
+    }
+
+    function buildProductChips() {
+      const el = document.getElementById('product-chips');
+      el.innerHTML = '';
+      PRODUCTS.forEach(p => {
+        const chip = document.createElement('div');
+        chip.className = 'product-chip' + (selectedProducts.includes(p) ? ' selected' : '');
+        chip.textContent = p;
+        chip.onclick = () => {
+          if (selectedProducts.includes(p)) {
+            selectedProducts = selectedProducts.filter(x => x !== p);
+            delete productLoads[p];
+            delete productTotals[p];
+          } else {
+            selectedProducts.push(p);
+          }
+          chip.classList.toggle('selected', selectedProducts.includes(p));
+        };
+        el.appendChild(chip);
+      });
+    }
+
+    function getWeekdays() {
+      const days = [];
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const dow = today.getDay();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+      for (let w = 0; w < 2; w++)
+        for (let d = 0; d < 5; d++) {
+          const date = new Date(monday);
+          date.setDate(monday.getDate() + w * 7 + d);
+          days.push({ date, week: w });
+        }
+      return days;
+    }
+
+    function buildProductBlocks() {
+      const el = document.getElementById('product-blocks');
+      el.innerHTML = '';
+      selectedProducts.forEach(p => {
+        if (!productLoads[p]) productLoads[p] = {};
+        if (!productTotals[p]) productTotals[p] = '';
+        const sid = p.replace(/[^a-zA-Z0-9]/g, '_');
+        const block = document.createElement('div');
+        block.className = 'product-block';
+        block.innerHTML = `
+          <div class="product-block-title">${p}</div>
+          <div class="total-row">
+            <label>Total loads needed:</label>
+            <input type="number" min="1" id="total_${sid}" value="${productTotals[p] || ''}" placeholder="0"
+              oninput="totalChanged('${p}','${sid}')" />
+            <div class="tally" id="tally_${sid}">0 of 0 assigned</div>
+          </div>
+          <div style="font-size:12px;color:#666;margin-bottom:8px">Spread your loads across the days below — they must add up to your total.</div>
+          <div class="day-grid" id="daygrid_${sid}"></div>`;
+        el.appendChild(block);
+        buildDayGrid(sid, p);
+        updateTally(p, sid);
+      });
+    }
+
+    function totalChanged(productName, sid) {
+      productTotals[productName] = parseInt(document.getElementById('total_' + sid).value) || 0;
+      updateTally(productName, sid);
+    }
+
+    function buildDayGrid(sid, productName) {
+      const grid = document.getElementById('daygrid_' + sid);
+      grid.innerHTML = '';
+      const days = getWeekdays();
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      days.forEach((item, i) => {
+        if (i === 0 || i === 5) {
+          const lbl = document.createElement('div');
+          lbl.className = 'week-label';
+          lbl.textContent = i === 0 ? 'This week' : 'Next week';
+          grid.appendChild(lbl);
+        }
+        const ts = item.date.getTime();
+        const isPast = item.date < today;
+        const loads = productLoads[productName][ts] || 0;
+        const wd = item.date.toLocaleDateString('en-US', { weekday: 'short' });
+        const mo = item.date.toLocaleDateString('en-US', { month: 'short' });
+        const dy = item.date.getDate();
+        const card = document.createElement('div');
+        card.className = 'day-card' + (isPast ? ' disabled' : loads > 0 ? ' active' : '');
+        card.id = 'daycard_' + sid + '_' + ts;
+        card.innerHTML = `
+          <div class="day-name">${wd}</div>
+          <div class="day-date">${mo} ${dy}</div>
+          <div class="counter">
+            <button class="counter-btn" onclick="changeLoad('${productName}','${sid}',${ts},-1)" ${isPast ? 'disabled' : ''}>−</button>
+            <span class="counter-val" id="val_${sid}_${ts}">${loads}</span>
+            <button class="counter-btn" onclick="changeLoad('${productName}','${sid}',${ts},1)" ${isPast ? 'disabled' : ''}>+</button>
+          </div>`;
+        grid.appendChild(card);
+      });
+    }
+
+    function changeLoad(productName, sid, ts, delta) {
+      if (!productLoads[productName]) productLoads[productName] = {};
+      const cur = productLoads[productName][ts] || 0;
+      const next = Math.max(0, cur + delta);
+      productLoads[productName][ts] = next;
+      const valEl = document.getElementById('val_' + sid + '_' + ts);
+      const cardEl = document.getElementById('daycard_' + sid + '_' + ts);
+      if (valEl) valEl.textContent = next;
+      if (cardEl) cardEl.classList.toggle('active', next > 0);
+      updateTally(productName, sid);
+    }
+
+    function updateTally(productName, sid) {
+      const loads = productLoads[productName] || {};
+      const assigned = Object.values(loads).reduce((a, b) => a + b, 0);
+      const total = parseInt(productTotals[productName]) || 0;
+      const el = document.getElementById('tally_' + sid);
+      if (!el) return;
+      el.textContent = assigned + ' of ' + (total || '?') + ' assigned';
+      el.className = 'tally';
+      if (total > 0) {
+        if (assigned === total) el.classList.add('match');
+        else if (assigned > total) el.classList.add('over');
+        else el.classList.add('under');
+      }
+    }
+
+    function getTotalAssigned(productName) {
+      return Object.values(productLoads[productName] || {}).reduce((a, b) => a + b, 0);
+    }
+
+    function buildReview() {
+      const card = document.getElementById('review-card');
+      let html = '<div style="font-size:14px;font-weight:600;margin-bottom:12px">Order summary for ' + farmer.name + '</div>';
+      selectedProducts.forEach(p => {
+        const total = productTotals[p];
+        const entries = Object.entries(productLoads[p] || {}).filter(([,v]) => v > 0);
+        html += '<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0">';
+        html += '<div style="font-weight:500;margin-bottom:6px">' + p + ' — ' + total + ' total loads</div>';
+        entries.forEach(([ts, loads]) => {
+          const d = new Date(parseInt(ts));
+          const day = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+          html += '<div style="font-size:13px;color:#444;padding:2px 0">' + day + ': ' + loads + ' load' + (loads !== 1 ? 's' : '') + '</div>';
+        });
+        html += '</div>';
+      });
+      card.innerHTML = html;
+    }
+
+    async function submitOrder() {
+      const msg = document.getElementById('form-msg');
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Submitting...';
+      msg.textContent = '';
+      try {
+        const notes = document.getElementById('f-notes').value.trim();
+        const orderRes = await sb('orders', {
+          method: 'POST',
+          body: JSON.stringify({ customer_id: farmer.id, notes, status: 'Pending' })
+        });
+        const order = Array.isArray(orderRes) ? orderRes[0] : orderRes;
+        if (!order || !order.id) throw new Error('Failed to create order');
+
+        const lines = [];
+        selectedProducts.forEach(p => {
+          const total = parseInt(productTotals[p]);
+          Object.entries(productLoads[p]).forEach(([ts, loads]) => {
+            if (loads > 0) {
+              const d = new Date(parseInt(ts));
+              lines.push({
+                order_id: order.id,
+                product: p,
+                total_loads: total,
+                delivery_date: d.toISOString().split('T')[0],
+                loads_on_date: loads,
+                status: 'Pending'
+              });
+            }
+          });
+        });
+        await sb('order_lines', { method: 'POST', body: JSON.stringify(lines) });
+
+        // Show success
+        document.getElementById('order-form').style.display = 'none';
+        document.getElementById('success-screen').style.display = 'block';
+      } catch(e) {
+        msg.style.color = 'red';
+        msg.textContent = 'Error: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit order';
+      }
+    }
+
+    function resetForm() {
+      selectedProducts = [];
+      productLoads = {};
+      productTotals = {};
+      document.getElementById('f-notes').value = '';
+      document.getElementById('success-screen').style.display = 'none';
+      document.getElementById('order-form').style.display = 'block';
+      buildProductChips();
+      goStep(1);
+    }
+
+    init();
+  </script>
+</body>
+</html>
