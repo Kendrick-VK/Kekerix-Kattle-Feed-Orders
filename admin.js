@@ -1,4 +1,3 @@
-
 const SUPABASE_URL = 'https://gghfgkzkgzfurbhwdbgv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnaGZna3prZ3pmdXJiaHdkYmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNDA3NjEsImV4cCI6MjA5MDgxNjc2MX0.Bn4mwiEbvlkPySs8ewZiH4NGi_2k6_Yciv1tscvW20o';
 
@@ -893,26 +892,32 @@ async function saveActiveCell() {
 }
 
 function moveRow(lineId, field, dir) {
-  const idx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-  const next = filteredLines[idx + dir];
+  // Only move through real saved rows (not _isNew temp rows without IDs)
+  const realLines = filteredLines.filter(l => !String(l.id).startsWith('new_') || l.load_number);
+  const idx = realLines.findIndex(l => String(l.id) === String(lineId));
+  if (idx < 0) return;
+  const next = realLines[idx + dir];
   if (next) startEdit(next.id, field);
 }
 
 function moveCol(lineId, field, dir) {
   const idx = FIELD_ORDER.indexOf(field);
-  const nextField = FIELD_ORDER[idx + dir];
-  if (nextField) {
-    startEdit(lineId, nextField);
+  const nextIdx = idx + dir;
+  if (nextIdx >= 0 && nextIdx < FIELD_ORDER.length) {
+    // Move to next/prev field in same row
+    startEdit(lineId, FIELD_ORDER[nextIdx]);
   } else if (dir > 0) {
-    // Wrap to next row first field
-    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-    const next = filteredLines[rowIdx + 1];
+    // Past last column — wrap to first column of next row
+    const realLines = filteredLines.filter(l => !String(l.id).startsWith('new_') || l.load_number);
+    const rowIdx = realLines.findIndex(l => String(l.id) === String(lineId));
+    const next = realLines[rowIdx + 1];
     if (next) startEdit(next.id, FIELD_ORDER[0]);
   } else {
-    // Wrap to prev row last field
-    const rowIdx = filteredLines.findIndex(l => String(l.id) === String(lineId));
-    const prev = filteredLines[rowIdx - 1];
-    if (prev) startEdit(prev.id, FIELD_ORDER[FIELD_ORDER.length-1]);
+    // Before first column — wrap to last column of prev row
+    const realLines = filteredLines.filter(l => !String(l.id).startsWith('new_') || l.load_number);
+    const rowIdx = realLines.findIndex(l => String(l.id) === String(lineId));
+    const prev = realLines[rowIdx - 1];
+    if (prev) startEdit(prev.id, FIELD_ORDER[FIELD_ORDER.length - 1]);
   }
 }
 
