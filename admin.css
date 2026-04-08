@@ -1,498 +1,318 @@
-/* ── Reset & base ─────────────────────────────────── */
-body { background: #fff; }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feed Orders — Admin</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
 
-/* ── Header ──────────────────────────────────────── */
-.admin-header {
-  background: #fff;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 0 12px;
-  height: 48px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-}
-.admin-header-inner {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.admin-title { font-size: 16px; font-weight: 500; color: #1a1a1a; }
-.admin-subtitle { font-size: 12px; color: #888; }
-.admin-container { padding: 0 0 3rem; }
+  <!-- HEADER -->
+  <div class="admin-header">
+    <div class="admin-header-inner">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div>
+          <div class="admin-title">Kekerix Kattle Feed Orders</div>
+          <div class="admin-subtitle" id="week-label"></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm" onclick="prevWeek()">← Prev</button>
+          <button class="btn-sm" onclick="todayWeek()">This week</button>
+          <button class="btn-sm" onclick="nextWeek()">Next →</button>
+        </div>
+      </div>
+      <a href="index.html" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 14px">+ Farmer order</a>
+    </div>
+  </div>
 
-/* ── Metrics ─────────────────────────────────────── */
-.metric-grid {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8f9fa;
-}
-.metric {
-  padding: 8px 20px;
-  border-right: 1px solid #e0e0e0;
-  cursor: default;
-}
-.metric:last-child { border-right: none; }
-.metric-label { font-size: 11px; color: #888; }
-.metric-value { font-size: 18px; font-weight: 600; color: #1a1a1a; line-height: 1.3; }
+  <div class="admin-container">
 
-/* ── Toolbar / filter bar ────────────────────────── */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8f9fa;
-  flex-wrap: wrap;
-}
-.toolbar select,
-.toolbar input[type="text"] {
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  font-size: 12px;
-  background: #fff;
-  color: #1a1a1a;
-  min-width: 0;
-}
-.toolbar select:focus,
-.toolbar input[type="text"]:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
-.toolbar-sep { width: 1px; height: 20px; background: #dadce0; margin: 0 2px; }
-.toolbar-btn {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  background: #fff;
-  font-size: 12px;
-  color: #444;
-  cursor: pointer;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.toolbar-btn:hover { background: #f1f3f4; border-color: #c0c0c0; }
-.toolbar-btn.danger { color: #c5221f; border-color: #f5c6c6; }
-.toolbar-btn.danger:hover { background: #fce8e6; }
-.toolbar-btn.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
-.toolbar-btn.primary:hover { background: #1765cc; }
-.toolbar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    <!-- METRICS -->
+    <div class="metric-grid" id="metrics"></div>
 
-/* ── Tabs ────────────────────────────────────────── */
-.admin-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid #e0e0e0;
-  background: #fff;
-  padding: 0 8px;
-  overflow-x: auto;
-}
-.admin-tab {
-  padding: 10px 20px;
-  font-size: 13px;
-  color: #666;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  cursor: pointer;
-  margin-bottom: -2px;
-  white-space: nowrap;
-  font-weight: 400;
-}
-.admin-tab:hover { color: #1a1a1a; background: #f8f9fa; }
-.admin-tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 500; }
+    <!-- TABS -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" id="tab-loads" onclick="showAdminTab('loads')">All loads</button>
+      <button class="admin-tab" id="tab-entry" onclick="showAdminTab('entry')">+ Enter loads from plant</button>
+      <button class="admin-tab" id="tab-orders" onclick="showAdminTab('orders')">Farmer orders</button>
+      <button class="admin-tab" id="tab-customers" onclick="showAdminTab('customers')">Customers</button>
+      <button class="admin-tab" id="tab-plants" onclick="showAdminTab('plants')">Plants</button>
+    </div>
 
-/* ── Sheet wrapper ───────────────────────────────── */
-.sheet-wrap {
-  overflow: auto;
-  background: #fff;
-  max-height: calc(100vh - 230px);
-}
+    <!-- ══ ALL LOADS TAB ══════════════════════════════ -->
+    <div id="panel-loads">
 
-/* ── Sheet table — Google Sheets look ───────────── */
-.sheet-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  table-layout: fixed;
-}
+      <!-- Toolbar row 1: filters -->
+      <div class="toolbar">
+        <select id="filter-product" onchange="applyFilters()" style="width:150px">
+          <option value="">All products</option>
+          <option>Wet distillers</option>
+          <option>Modified distillers</option>
+          <option>Dry distillers</option>
+          <option>Loosehulls</option>
+          <option>Soyhull pellets</option>
+          <option>Syrup</option>
+          <option>Corn screenings</option>
+          <option>Gluten</option>
+        </select>
+        <select id="filter-plant" onchange="applyFilters()" style="width:140px">
+          <option value="">All plants</option>
+        </select>
+        <select id="filter-trucker" onchange="applyFilters()" style="width:140px">
+          <option value="">All truckers</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="Search customer, load #, notes…" oninput="applyFilters()" style="width:220px" />
+        <button class="toolbar-btn" onclick="clearFilters()">✕ Clear filters</button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="undo-edit-btn" onclick="undoEdit()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
+        <button class="toolbar-btn" id="redo-edit-btn" onclick="redoEdit()" disabled title="Redo (Ctrl+Y)">↪ Redo</button>
+        <div class="toolbar-sep"></div>
+        <span id="filter-count" style="font-size:12px;color:#888"></span>
+      </div>
 
-/* Row number column */
-.sheet-table .col-rownum {
-  width: 40px;
-  min-width: 40px;
-  background: #f8f9fa;
-  color: #888;
-  font-size: 11px;
-  text-align: center;
-  border-right: 1px solid #e0e0e0;
-  user-select: none;
-  cursor: default;
-  padding: 0;
-}
-.sheet-table thead .col-rownum {
-  background: #f8f9fa;
-  border-bottom: 1px solid #c0c0c0;
-  border-right: 1px solid #c0c0c0;
-  padding: 6px 0;
-}
+      <!-- Toolbar row 2: selection actions (hidden until rows selected) -->
+      <div class="toolbar" id="selection-toolbar" style="display:none;background:#e8f0fe;border-bottom-color:#a8c7fa">
+        <span id="selection-count" style="font-size:12px;font-weight:500;color:#1a73e8"></span>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" onclick="showColorMenuForSelected()">🎨 Color rows</button>
+        <button class="toolbar-btn" onclick="cutSelectedRows()">✂ Cut (Ctrl+X)</button>
+        <button class="toolbar-btn" onclick="openPasteModal()" id="paste-btn" style="display:none">📋 Paste to date (Ctrl+V)</button>
+        <button class="toolbar-btn danger" onclick="deleteSelectedRows()">🗑 Delete selected</button>
+        <button class="toolbar-btn" onclick="clearSelection()">✕ Deselect</button>
+      </div>
 
-/* Checkbox column */
-.sheet-table .col-check {
-  width: 32px;
-  min-width: 32px;
-  text-align: center;
-  background: #f8f9fa;
-  border-right: 1px solid #e0e0e0;
-  padding: 0;
-}
-.sheet-table thead .col-check {
-  background: #f8f9fa;
-  border-bottom: 1px solid #c0c0c0;
-  border-right: 1px solid #c0c0c0;
-}
-.sheet-table input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-  accent-color: #1a73e8;
-}
+      <div class="sheet-wrap">
+        <table class="sheet-table" id="sheet-table">
+          <thead>
+            <tr>
+              <th class="col-rownum">#</th>
+              <th class="col-check"><input type="checkbox" id="check-all" onchange="toggleAllRows(this.checked)" title="Select all" /></th>
+              <th style="width:90px">Notes</th>
+              <th style="width:130px">Product</th>
+              <th style="width:115px">Load #</th>
+              <th style="width:160px">Customer</th>
+              <th style="width:120px">Plant</th>
+              <th style="width:130px">Trucker</th>
+              <th style="width:50px">Loads</th>
+              <th style="width:65px">Tons</th>
+              <th style="width:75px">Markup</th>
+              <th style="width:90px">Commission</th>
+              <th style="width:30px"></th>
+            </tr>
+          </thead>
+          <tbody id="sheet-body">
+            <tr><td colspan="13" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="sheet-hint">Click cell to edit · Tab = next cell · Enter = confirm · Esc = cancel · Click row # to select row</div>
+    </div>
 
-/* Headers */
-.sheet-table thead tr {
-  background: #f8f9fa;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.sheet-table th {
-  padding: 6px 8px;
-  text-align: left;
-  font-weight: 500;
-  font-size: 11px;
-  color: #444;
-  border-bottom: 2px solid #b0b0b0;
-  border-right: 1px solid #c0c0c0;
-  white-space: nowrap;
-  user-select: none;
-  background: #f8f9fa;
-}
-.sheet-table th:last-child { border-right: none; }
+    <!-- ══ ENTER LOADS TAB ════════════════════════════ -->
+    <div id="panel-entry" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Paste loads from plant</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
+          <div>
+            <label class="field-label">Plant</label>
+            <select id="entry-plant" style="width:100%">
+              <option value="">Select plant...</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Product</label>
+            <select id="entry-product" style="width:100%">
+              <option value="">Select product...</option>
+              <option>Wet distillers</option>
+              <option>Modified distillers</option>
+              <option>Dry distillers</option>
+              <option>Loosehulls</option>
+              <option>Soyhull pellets</option>
+              <option>Syrup</option>
+              <option>Corn screenings</option>
+              <option>Gluten</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Default date (optional)</label>
+            <input type="date" id="entry-date" style="width:100%" />
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Quick generate — type first load # and count</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input type="text" id="gen-first" placeholder="e.g. SC136-0574-001" style="flex:2" />
+            <input type="number" id="gen-count" placeholder="# of loads" min="1" style="flex:1;max-width:110px" />
+            <button class="btn-sm" onclick="generateSequence()" style="white-space:nowrap">Generate</button>
+          </div>
+        </div>
+        <div style="margin-top:1rem">
+          <label class="field-label">Or paste load numbers — one per line</label>
+          <textarea id="entry-loads" rows="6" placeholder="SC136-0574-001&#10;SC136-0574-002&#10;..." style="width:100%;margin-top:4px;font-family:monospace;font-size:13px;border:1px solid #dadce0;border-radius:4px;padding:8px"></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:0.75rem;gap:8px">
+          <button class="btn-sm" onclick="clearEntryForm()">Clear</button>
+          <button class="btn-primary" onclick="importLoads()" style="margin-top:0">Import loads</button>
+        </div>
+        <p id="entry-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
 
-/* Body cells */
-.sheet-table td {
-  padding: 0;
-  border-bottom: 1px solid #d0d0d0;
-  border-right: 1px solid #d0d0d0;
-  height: 22px;
-  position: relative;
-  vertical-align: middle;
-}
-.sheet-table td:last-child { border-right: none; }
+      <div id="entry-table-wrap" style="display:none;margin:0 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <div style="font-size:14px;font-weight:500;color:#1a1a1a" id="entry-table-title">Imported loads</div>
+          <button class="btn-primary" onclick="saveAllLoads()" id="save-all-btn">Save all to database</button>
+        </div>
+        <div class="sheet-wrap">
+          <table class="sheet-table">
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>Load #</th><th>Plant</th><th>Product</th><th>Date</th><th>Customer</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="entry-tbody"></tbody>
+          </table>
+        </div>
+        <p id="save-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+    </div>
 
-/* Row hover */
-.sheet-table tbody tr:hover td { background: #f8f9fa; }
-.sheet-table tbody tr:hover .col-rownum,
-.sheet-table tbody tr:hover .col-check { background: #e8eaed; }
+    <!-- ══ FARMER ORDERS TAB ══════════════════════════ -->
+    <div id="panel-orders" style="display:none">
+      <div class="toolbar">
+        <select id="orders-filter-product" onchange="renderOrdersTable()" style="width:160px">
+          <option value="">All products</option>
+          <option>Wet distillers</option>
+          <option>Modified distillers</option>
+          <option>Dry distillers</option>
+          <option>Loosehulls</option>
+          <option>Soyhull pellets</option>
+          <option>Syrup</option>
+          <option>Corn screenings</option>
+          <option>Gluten</option>
+        </select>
+        <input type="text" id="orders-filter-search" placeholder="Search farmer…" oninput="renderOrdersTable()" style="width:200px" />
+        <span id="orders-summary-label" style="font-size:12px;color:#888;margin-left:4px"></span>
+      </div>
+      <div class="sheet-wrap">
+        <table class="sheet-table">
+          <thead>
+            <tr>
+              <th style="width:120px">Date</th>
+              <th style="width:180px">Farmer</th>
+              <th style="width:160px">Product</th>
+              <th style="width:140px">Loads needed</th>
+              <th style="width:110px">Ordered on</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr><td colspan="6" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-/* Selected rows */
-.sheet-table tbody tr.row-selected td { background: #e8f0fe !important; }
-.sheet-table tbody tr.row-selected .col-rownum,
-.sheet-table tbody tr.row-selected .col-check { background: #c5d8fb !important; }
+    <!-- ══ CUSTOMERS TAB ══════════════════════════════ -->
+    <div id="panel-customers" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Customer list</div>
+        <div class="sheet-wrap" style="margin-bottom:1rem">
+          <table class="sheet-table">
+            <thead><tr><th>Name</th><th>Phone</th><th style="width:130px">Order link</th><th style="width:120px"></th></tr></thead>
+            <tbody id="customers-tbody">
+              <tr><td colspan="3" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:0.75rem">Add new customer</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+          <div>
+            <label class="field-label">Name</label>
+            <input type="text" id="new-cust-name" placeholder="Farm or farmer name" style="width:100%" />
+          </div>
+          <div>
+            <label class="field-label">Phone</label>
+            <input type="tel" id="new-cust-phone" placeholder="605-555-0100" style="width:100%" />
+          </div>
+          <button class="btn-sm" onclick="addCustomer()" style="height:36px">Add</button>
+        </div>
+        <p id="cust-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+    </div>
 
-/* Date group header rows */
-.sheet-table tr.date-row td {
-  background: #e8f0fe;
-  color: #1a73e8;
-  font-weight: 600;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-bottom: 1px solid #c5d8fb;
-  border-top: 3px solid #1a73e8;
-  height: auto;
-}
+    <!-- ══ PLANTS TAB ══════════════════════════════ -->
+    <div id="panel-plants" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Plant list</div>
+        <div class="sheet-wrap" style="margin-bottom:1rem">
+          <table class="sheet-table">
+            <thead><tr><th>Plant name</th><th style="width:120px"></th></tr></thead>
+            <tbody id="plants-tbody">
+              <tr><td colspan="2" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:0.75rem">Add new plant</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+          <div>
+            <label class="field-label">Plant name</label>
+            <input type="text" id="new-plant-name" placeholder="e.g. Sioux Center" style="width:100%" onkeydown="if(event.key==='Enter') addPlant()" />
+          </div>
+          <button class="btn-sm" onclick="addPlant()" style="height:36px">Add</button>
+        </div>
+        <p id="plant-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+    </div>
 
-/* ── Cell view & edit ─────────────────────────────── */
-.cell-view {
-  padding: 0 6px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  cursor: cell;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #1a1a1a;
-  font-size: 12px;
-}
-.cell-view.empty {
-  color: #ccc;
-  font-style: italic;
-}
-.cell-view:hover { background: rgba(26,115,232,0.08); }
-.cell-view.empty:hover { background: rgba(26,115,232,0.08); }
+  </div><!-- /admin-container -->
 
-td.cell-active {
-  outline: 2px solid #1a73e8;
-  outline-offset: -1px;
-  z-index: 5;
-  background: #fff !important;
-}
-.cell-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0 6px;
-  border: none;
-  font-size: 12px;
-  font-family: inherit;
-  background: #fff;
-  color: #1a1a1a;
-  outline: none;
-  z-index: 10;
-}
-select.cell-input { cursor: pointer; }
+  <!-- UNDO TOAST -->
+  <div id="undo-toast">
+    <span id="undo-msg">Deleted rows</span>
+    <button onclick="undoDelete()">UNDO</button>
+    <button onclick="hideToast()" style="color:#aaa;font-size:11px;font-weight:400">✕</button>
+  </div>
 
-/* Commission cell */
-.cell-commission { background: #e6f4ea; color: #137333; font-weight: 500; }
-.cell-commission.empty { background: transparent; color: #bbb; font-weight: 400; }
-
-/* Trucker assigned indicator */
-.row-assigned td.col-notes-td { border-left: 3px solid #fbbc04; }
-.row-unassigned td.col-notes-td { border-left: 3px solid #e0e0e0; }
-
-/* Farmer order badge */
-.farmer-order-badge {
-  display: inline-block;
-  background: #fff3cd;
-  color: #856404;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 6px;
-  border-radius: 10px;
-  white-space: nowrap;
-  line-height: 1.7;
-  margin-left: 4px;
-}
-
-/* ── Delete / action buttons ─────────────────────── */
-.del-row-btn {
-  width: 20px; height: 20px;
-  border-radius: 3px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #aaa;
-  font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  margin: auto;
-}
-.del-row-btn:hover { background: #fce8e6; color: #c5221f; }
-
-.del-btn { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #f5c6c6; background: transparent; cursor: pointer; color: #c5221f; }
-.del-btn:hover { background: #fce8e6; }
-.edit-btn { font-size: 11px; padding: 2px 10px; border-radius: 4px; border: 1px solid #dadce0; background: transparent; cursor: pointer; color: #444; }
-.edit-btn:hover { border-color: #1a73e8; color: #1a73e8; }
-
-/* ── Undo toast ──────────────────────────────────── */
-#undo-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(80px);
-  background: #323232;
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  z-index: 999;
-  transition: transform 0.25s ease;
-  white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-}
-#undo-toast.show { transform: translateX(-50%) translateY(0); }
-#undo-toast button {
-  background: transparent;
-  border: none;
-  color: #8ab4f8;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-/* ── Table empty / hint ──────────────────────────── */
-.table-empty { text-align: center; padding: 2.5rem; color: #888; font-size: 13px; }
-.sheet-hint { font-size: 11px; color: #aaa; padding: 4px 8px; border-top: 1px solid #e0e0e0; background: #fafafa; }
-
-/* ── Entry panel ─────────────────────────────────── */
-.card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1.25rem; margin: 12px; }
-.field-label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; }
-.entry-input { width: 100%; padding: 5px 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 12px; background: #fff; color: #1a1a1a; }
-.entry-input:focus { outline: none; border-color: #1a73e8; }
-
-/* Drag fill handle */
-.drag-handle {
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #1a73e8;
-  cursor: ns-resize;
-  font-size: 10px;
-  line-height: 1;
-  user-select: none;
-  opacity: 0.6;
-}
-.drag-handle:hover { opacity: 1; }
-.drag-fill-highlight { background: #e8f0fe !important; }
-
-/* ── Farmer orders panel ─────────────────────────── */
-.orders-panel { padding: 12px; }
-.orders-summary {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.orders-summary-card {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-size: 12px;
-  color: #856404;
-  font-weight: 500;
-}
-
-/* ── Buttons ─────────────────────────────────────── */
-.btn-primary {
-  background: #1a73e8;
-  color: #fff;
-  border: 1px solid #1a73e8;
-  padding: 7px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  width: auto !important;
-  display: inline-flex;
-  align-items: center;
-  margin-top: 0 !important;
-  text-decoration: none;
-}
-.btn-primary:hover { background: #1765cc; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-sm {
-  padding: 5px 12px;
-  font-size: 12px;
-  border-radius: 4px;
-  border: 1px solid #dadce0;
-  background: #fff;
-  cursor: pointer;
-  color: #444;
-}
-.btn-sm:hover { background: #f1f3f4; }
-
-/* ── Modal ───────────────────────────────────────── */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 200; }
-.modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #fff; border-radius: 8px; padding: 1.5rem; width: 90%; max-width: 380px; z-index: 201; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
-.modal-title { font-size: 16px; font-weight: 500; }
-
-/* ── Spinner ─────────────────────────────────────── */
-.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #e0e0e0; border-top-color: #1a73e8; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+  <!-- EDIT CUSTOMER MODAL -->
+  <div class="modal-backdrop" id="modal-backdrop" style="display:none"></div>
+  <div class="modal" id="edit-cust-modal" style="display:none" onclick="event.stopPropagation()">
+    <div class="modal-title">Edit customer</div>
+    <div style="margin-top:1rem">
+      <label class="field-label">Name</label>
+      <input type="text" id="ec-name" style="width:100%" />
+    </div>
+    <div style="margin-top:0.75rem">
+      <label class="field-label">Phone</label>
+      <input type="tel" id="ec-phone" style="width:100%" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn-sm" onclick="closeModal()" style="flex:1;padding:9px">Cancel</button>
+      <button class="btn-primary" onclick="saveCustomer()" style="flex:2;margin-top:0">Save</button>
+    </div>
+    <p style="font-size:12px;margin-top:0.5rem" id="ec-msg"></p>
+  </div>
 
 
-/* ── Cut rows (Ctrl+X) ───────────────────────────── */
-.row-cut td { opacity: 0.45; background: #fffde7 !important; }
-.row-cut .col-rownum,
-.row-cut .col-check { background: #fff9c4 !important; }
+  <!-- PASTE DATE MODAL -->
+  <div class="modal" id="paste-date-modal" style="display:none" onclick="event.stopPropagation()">
+    <div class="modal-title">Move loads to date</div>
+    <p id="paste-modal-msg" style="font-size:13px;color:#666;margin:8px 0 12px"></p>
+    <div>
+      <label class="field-label">Target date</label>
+      <input type="date" id="paste-date-input" style="width:100%" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn-sm" onclick="closePasteModal()" style="flex:1;padding:9px">Cancel</button>
+      <button class="btn-primary" onclick="confirmPaste()" style="flex:2;margin-top:0;justify-content:center">Move loads</button>
+    </div>
+  </div>
 
-/* ── Drag-over date header highlight ─────────────── */
-tr.date-row.drag-target td {
-  background: #1a73e8 !important;
-  color: #fff !important;
-  outline: 2px solid #1557b0;
-  outline-offset: -2px;
-}
+  <!-- ROW COLOR CONTEXT MENU -->
+  <div id="color-menu" style="display:none;position:fixed;z-index:500;background:#fff;border:1px solid #dadce0;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;min-width:150px;font-size:13px"></div>
 
-
-/* ── Color context menu ──────────────────────────── */
-.color-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.color-menu-item:hover { background: #f1f3f4; }
-.color-swatch {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-
-/* ── Add row button on date headers ─────────────── */
-.add-row-btn {
-  font-size: 11px;
-  padding: 2px 10px;
-  border-radius: 4px;
-  border: 1px solid #a8c7fa;
-  background: #fff;
-  color: #1a73e8;
-  cursor: pointer;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.add-row-btn:hover { background: #e8f0fe; }
-
-
-/* ── Blank placeholder rows ──────────────────────── */
-.blank-row td { height: 22px; border-bottom: 1px solid #e8e8e8; border-right: 1px solid #d0d0d0; background: #fafafa; }
-.blank-row .col-rownum { background: #f0f0f0 !important; }
-.blank-row:hover td { background: #f0f4ff !important; }
-.blank-row:hover td.col-rownum { background: #dde6f5 !important; }
-
-
-/* ── Fill handle ─────────────────────────────────── */
-.fill-handle {
-  display: none;
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  width: 8px;
-  height: 8px;
-  background: #1a73e8;
-  border: 1px solid #fff;
-  cursor: crosshair;
-  z-index: 4;
-}
-td:hover .fill-handle,
-td.cell-active .fill-handle { display: block; }
-
-/* Rows highlighted during fill drag */
-tr.fill-highlight td { background: #e8f0fe !important; }
-
-/* ── Responsive ──────────────────────────────────── */
-@media (max-width: 600px) {
-  .metric-grid { flex-wrap: wrap; }
-  .metric { padding: 6px 12px; }
-  #panel-entry .card > div:nth-child(2) { grid-template-columns: 1fr !important; }
-}
+  <script src="admin.js"></script>
+</body>
+</html>
