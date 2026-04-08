@@ -517,8 +517,9 @@ async function deleteRows(rows) {
 
     // Remove from local state
     ids.forEach(id => {
-      allLines = allLines.filter(l => l.id !== id);
+      allLines = allLines.filter(l => String(l.id) !== String(id));
       selectedIds.delete(id);
+      selectedIds.forEach(sid => { if (String(sid) === String(id)) selectedIds.delete(sid); });
     });
 
     applyFilters();
@@ -555,9 +556,41 @@ function hideToast() {
   document.getElementById('undo-toast').classList.remove('show');
 }
 
+
+// ── Restore a single cell to view state (used when cancelling edit) ──
+function restoreCell(td, line, field) {
+  const farmer  = line.customer_name||(line.orders?.customers?.name)||'';
+  const tons     = line.tons     != null ? line.tons     : '';
+  const markup   = line.markup   != null ? line.markup   : '';
+  const commission = line.commission != null ? line.commission : '';
+
+  if (field === 'commission') {
+    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit(${line.id},'commission')">${commission!==''?('$'+commission):'—'}</div>`;
+    return;
+  }
+  const val = line[field];
+  const isEmpty = val == null || val === '';
+  let display = '';
+  if (field === 'delivery_date') display = formatDate(val);
+  else if (field === 'customer_name') display = farmer || '—';
+  else if (field === 'tons') display = tons !== '' ? String(tons) : '—';
+  else if (field === 'markup') display = markup !== '' ? ('$'+markup) : '—';
+  else if (field === 'loads_on_date') display = String(val || 1);
+  else display = val || '—';
+  td.innerHTML = `<div class="cell-view${isEmpty?' empty':''}" onclick="startEdit('${line.id}','${field}')">${display}</div>`;
+}
+
 // ── Inline editing ────────────────────────────────────
 function startEdit(lineId, field) {
-  if (activeCell) commitCell(false);
+  // Cancel any active cell without re-rendering the whole sheet
+  if (activeCell) {
+    const { td: oldTd, lineId: oldId, field: oldField, input: oldInput } = activeCell;
+    activeCell = null;
+    oldTd.classList.remove('cell-active');
+    // Restore the cell display without full re-render
+    const oldLine = allLines.find(l => String(l.id) === String(oldId));
+    if (oldLine) restoreCell(oldTd, oldLine, oldField);
+  }
   const tr = document.querySelector(`tr[data-id="${lineId}"]`);
   if (!tr) return;
   const colIdx = COL_MAP[field];
@@ -565,7 +598,7 @@ function startEdit(lineId, field) {
   if (!td) return;
   td.classList.add('cell-active');
 
-  const line = allLines.find(l => l.id === lineId);
+  const line = allLines.find(l => String(l.id) === String(lineId));
   const currentVal = line ? (line[field] != null ? line[field] : '') : '';
   const type = FIELD_TYPE[field];
   let input;
@@ -645,7 +678,7 @@ async function commitCell(save) {
   else if (type==='decimal')  newVal = input.value !== '' ? parseFloat(parseFloat(input.value).toFixed(2)) : null;
   else                        newVal = input.value.trim();
 
-  const line = allLines.find(l => l.id === lineId);
+  const line = allLines.find(l => String(l.id) === String(lineId));
   if (!line) { renderSheet(); return; }
 
   const strNew = newVal != null ? String(newVal) : '';
