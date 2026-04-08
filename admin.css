@@ -233,8 +233,14 @@ body { background: #fff; }
   color: #1a1a1a;
   font-size: 12px;
 }
-.cell-view.empty { color: #bbb; font-style: italic; }
-.cell-view:hover { background: rgba(26,115,232,0.06); }
+.cell-view.empty {
+  color: #bbb;
+  font-style: italic;
+  outline: 1px dashed #d0d0d0;
+  outline-offset: -2px;
+}
+.cell-view:hover { background: rgba(26,115,232,0.08); }
+.cell-view.empty:hover { background: rgba(26,115,232,0.08); }
 
 td.cell-active {
   outline: 2px solid #1a73e8;
