@@ -179,8 +179,8 @@ body { background: #fff; }
   font-weight: 500;
   font-size: 11px;
   color: #444;
-  border-bottom: 2px solid #c0c0c0;
-  border-right: 1px solid #dadce0;
+  border-bottom: 2px solid #b0b0b0;
+  border-right: 1px solid #c0c0c0;
   white-space: nowrap;
   user-select: none;
   background: #f8f9fa;
@@ -190,8 +190,8 @@ body { background: #fff; }
 /* Body cells */
 .sheet-table td {
   padding: 0;
-  border-bottom: 1px solid #e0e0e0;
-  border-right: 1px solid #e8eaed;
+  border-bottom: 1px solid #d0d0d0;
+  border-right: 1px solid #d0d0d0;
   height: 22px;
   position: relative;
   vertical-align: middle;
@@ -234,10 +234,8 @@ body { background: #fff; }
   font-size: 12px;
 }
 .cell-view.empty {
-  color: #bbb;
+  color: #ccc;
   font-style: italic;
-  outline: 1px dashed #d0d0d0;
-  outline-offset: -2px;
 }
 .cell-view:hover { background: rgba(26,115,232,0.08); }
 .cell-view.empty:hover { background: rgba(26,115,232,0.08); }
@@ -467,9 +465,29 @@ tr.date-row.drag-target td {
 
 
 /* ── Blank placeholder rows ──────────────────────── */
-.blank-row td { height: 22px; border-bottom: 1px solid #f0f0f0; border-right: 1px solid #f0f0f0; }
+.blank-row td { height: 22px; border-bottom: 1px solid #d0d0d0; border-right: 1px solid #d0d0d0; }
 .blank-row:hover td { background: #f8f9fa; }
 .blank-row:hover td.col-rownum { background: #e8eaed; }
+
+
+/* ── Fill handle ─────────────────────────────────── */
+.fill-handle {
+  display: none;
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 8px;
+  height: 8px;
+  background: #1a73e8;
+  border: 1px solid #fff;
+  cursor: crosshair;
+  z-index: 4;
+}
+td:hover .fill-handle,
+td.cell-active .fill-handle { display: block; }
+
+/* Rows highlighted during fill drag */
+tr.fill-highlight td { background: #e8f0fe !important; }
 
 /* ── Responsive ──────────────────────────────────── */
 @media (max-width: 600px) {
