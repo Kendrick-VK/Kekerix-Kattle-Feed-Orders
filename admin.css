@@ -216,7 +216,7 @@ body { background: #fff; }
   font-size: 12px;
   padding: 4px 10px;
   border-bottom: 1px solid #c5d8fb;
-  border-top: 2px solid #a8c7fa;
+  border-top: 3px solid #1a73e8;
   height: auto;
 }
 
@@ -465,9 +465,10 @@ tr.date-row.drag-target td {
 
 
 /* ── Blank placeholder rows ──────────────────────── */
-.blank-row td { height: 22px; border-bottom: 1px solid #d0d0d0; border-right: 1px solid #d0d0d0; }
-.blank-row:hover td { background: #f8f9fa; }
-.blank-row:hover td.col-rownum { background: #e8eaed; }
+.blank-row td { height: 22px; border-bottom: 1px solid #e8e8e8; border-right: 1px solid #d0d0d0; background: #fafafa; }
+.blank-row .col-rownum { background: #f0f0f0 !important; }
+.blank-row:hover td { background: #f0f4ff !important; }
+.blank-row:hover td.col-rownum { background: #dde6f5 !important; }
 
 
 /* ── Fill handle ─────────────────────────────────── */
