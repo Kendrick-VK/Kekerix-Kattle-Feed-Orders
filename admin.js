@@ -22,7 +22,7 @@ const COL_MAP = {
 const FIELD_ORDER = ['notes','delivery_date','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
 const FIELD_TYPE = {
   notes:'text', delivery_date:'date', product:'select-product', load_number:'text',
-  customer_name:'customer', plant:'select-plant', hauler:'text',
+  customer_name:'customer', plant:'plant', hauler:'text',
   loads_on_date:'number', tons:'decimal', markup:'decimal', commission:'decimal'
 };
 
@@ -36,6 +36,9 @@ let activeCell    = null;
 let editingCustomerId = null;
 let importedRows  = [];
 let dragFillStart = null;
+
+// Fill handle (drag cell value down)
+let fillHandleSource = null;  // { lineId, field, value }
 
 // Multi-select & undo
 let selectedIds   = new Set();
@@ -72,6 +75,26 @@ async function init() {
   document.getElementById('sheet-body').addEventListener('click', e => {
     const btn = e.target.closest('.del-row-btn[data-lid]');
     if (btn) { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); }
+  });
+
+  // Fill handle — mousedown on .fill-handle dot starts a drag-fill
+  document.getElementById('sheet-body').addEventListener('mousedown', e => {
+    const handle = e.target.closest('.fill-handle');
+    if (!handle) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const td = handle.closest('td');
+    const tr = handle.closest('tr');
+    if (!td || !tr) return;
+    const lid = tr.dataset.id;
+    // Find which field this td is
+    const fieldName = td.dataset.field;
+    if (!lid || !fieldName) return;
+    const line = allLines.find(l => String(l.id) === String(lid));
+    if (!line) return;
+    fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName] };
+    document.addEventListener('mousemove', onFillHandleMove);
+    document.addEventListener('mouseup',   onFillHandleEnd);
   });
   // Backdrop click closes whichever modal is open
   document.getElementById('modal-backdrop').addEventListener('click', () => {
@@ -376,17 +399,17 @@ function renderSheet() {
               ondragstart="rowDragStart(event,'${lid}')"
               style="cursor:grab">${rowNum}</td>
           <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange('${lid}',this.checked)" /></td>
-          <td class="col-notes-td"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div></td>
-          <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit('${lid}','delivery_date')">${formatDate(l.delivery_date)}</div></td>
-          <td><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div></td>
-          <td><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
-          <td><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div></td>
-          <td><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div></td>
-          <td><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div></td>
-          <td><div class="cell-view" onclick="startEdit('${lid}','loads_on_date')">${l.loads_on_date||1}</div></td>
-          <td><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div></td>
-          <td><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div></td>
-          <td><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div></td>
+          <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div>${noteVal?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="delivery_date"><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit('${lid}','delivery_date')">${formatDate(l.delivery_date)}</div></td>
+          <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div>${l.product?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="load_number"><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
+          <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div>${farmer?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div>${l.plant?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div>${hasTrucker?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="loads_on_date"><div class="cell-view" onclick="startEdit('${lid}','loads_on_date')">${l.loads_on_date||1}</div></td>
+          <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div>${tons!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div>${markup!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div>${commission!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td><button class="del-row-btn" data-lid="${lid}" title="Delete">×</button></td>
         </tr>`;
       rowNum++;
@@ -584,7 +607,7 @@ function restoreCell(td, line, field) {
   const commission = line.commission != null ? line.commission : '';
 
   if (field === 'commission') {
-    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit(${line.id},'commission')">${commission!==''?('$'+commission):'—'}</div>`;
+    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${line.id}','commission')">${commission!==''?('$'+commission):'—'}</div>`;
     return;
   }
   const val = line[field];
@@ -636,19 +659,17 @@ function startEdit(lineId, field) {
       if (p === currentVal) o.selected = true;
       input.appendChild(o);
     });
-  } else if (type === 'select-plant') {
-    input = document.createElement('select');
+  } else if (type === 'plant') {
+    input = document.createElement('input');
     input.className = 'cell-input';
-    const blank = document.createElement('option');
-    blank.value = ''; blank.textContent = '—';
-    if (!currentVal) blank.selected = true;
-    input.appendChild(blank);
-    allPlants.forEach(p => {
-      const o = document.createElement('option');
-      o.textContent = p.name;
-      if (p.name === currentVal) o.selected = true;
-      input.appendChild(o);
-    });
+    input.type = 'text';
+    input.value = currentVal;
+    if (allPlants.length) {
+      let dl = document.getElementById('plant-datalist');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'plant-datalist'; document.body.appendChild(dl); }
+      dl.innerHTML = allPlants.map(p => `<option value="${p.name}">`).join('');
+      input.setAttribute('list', 'plant-datalist');
+    }
   } else if (type === 'customer') {
     input = document.createElement('input');
     input.className = 'cell-input';
@@ -1244,6 +1265,62 @@ async function deleteCustomer(id) {
   } catch(e) { alert('Error removing customer: ' + e.message); }
 }
 
+
+
+// ── Fill handle (drag value down) ─────────────────────
+function onFillHandleMove(e) {
+  if (!fillHandleSource) return;
+  // Highlight rows below the source
+  const tbody = document.getElementById('sheet-body');
+  const rows = [...tbody.querySelectorAll('tr[data-id]')];
+  const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
+  rows.forEach((r, i) => r.classList.toggle('fill-highlight', i > sourceIdx && e.clientY >= r.getBoundingClientRect().top));
+}
+
+function onFillHandleEnd(e) {
+  document.removeEventListener('mousemove', onFillHandleMove);
+  document.removeEventListener('mouseup',   onFillHandleEnd);
+  if (!fillHandleSource) return;
+
+  const tbody = document.getElementById('sheet-body');
+  const rows = [...tbody.querySelectorAll('tr[data-id]')];
+  const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
+
+  // Collect target rows (highlighted ones below source)
+  const targets = rows.filter((r, i) => i > sourceIdx && r.classList.contains('fill-highlight'));
+  rows.forEach(r => r.classList.remove('fill-highlight'));
+
+  if (!targets.length) { fillHandleSource = null; return; }
+
+  const { field, value } = fillHandleSource;
+  fillHandleSource = null;
+
+  // Apply value to each target row
+  targets.forEach(async tr => {
+    const lid = tr.dataset.id;
+    const line = allLines.find(l => String(l.id) === String(lid));
+    if (!line) return;
+    const oldVal = line[field];
+    line[field] = value;
+    // Save to Supabase
+    if (String(oldVal) !== String(value)) {
+      if (line._isNew) {
+        // Will be saved on next real commit
+      } else {
+        try {
+          await sb('order_lines?id=eq.' + lid, {
+            method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ [field]: value })
+          });
+        } catch(err) { console.error('Fill save error:', err); }
+      }
+    }
+    // Update cell display
+    const colIdx = COL_MAP[field];
+    const td = tr.children[colIdx];
+    if (td) restoreCell(td, line, field);
+  });
+}
 
 // ── Drag rows to a date header ────────────────────────
 function rowDragMousedown(e, lineId) {
