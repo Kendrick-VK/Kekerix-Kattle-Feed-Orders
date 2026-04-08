@@ -123,14 +123,15 @@ function getWeekRange() {
   const dow = today.getDay();
   const monday = new Date(today);
   monday.setDate(today.getDate() - (dow===0?6:dow-1) + weekOffset*7);
-  const friday = new Date(monday); friday.setDate(monday.getDate()+4);
+  const friday = new Date(monday); friday.setDate(monday.getDate()+5);
   return { monday, friday };
 }
 
 function renderWeekLabel() {
   const { monday, friday } = getWeekRange();
   const fmt = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  document.getElementById('week-label').textContent = 'Week of '+fmt(monday)+' — '+fmt(friday);
+  const saturday = new Date(monday); saturday.setDate(monday.getDate()+5);
+  document.getElementById('week-label').textContent = 'Week of '+fmt(monday)+' — '+fmt(saturday);
 }
 
 function prevWeek()  { weekOffset--; renderWeekLabel(); applyFilters(); }
@@ -252,7 +253,7 @@ function renderSheet() {
     // Show day headers with add buttons even when no loads
     const { monday } = getWeekRange();
     let html = '';
-    for (let d = 0; d < 5; d++) {
+    for (let d = 0; d < 6; d++) {
       const date = new Date(monday);
       date.setDate(monday.getDate() + d);
       const dateStr = date.toISOString().split('T')[0];
@@ -297,13 +298,26 @@ function renderSheet() {
     grouped[l.delivery_date].push(l);
   });
 
+  // Always show all 5 weekdays even if they have no loads
+  const { monday } = getWeekRange();
+  const weekDates = [];
+  for (let d = 0; d < 6; d++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + d);
+    weekDates.push(date.toISOString().split('T')[0]);
+  }
+  // Also include any dates outside the week that have _isNew rows
+  const extraDates = Object.keys(grouped).filter(ds => !weekDates.includes(ds));
+  const allDates = [...weekDates, ...extraDates];
+
   let html = '';
   let rowNum = 1;
 
-  Object.keys(grouped).sort().forEach(dateStr => {
+  allDates.forEach(dateStr => {
     const d = new Date(dateStr+'T00:00:00');
     const dayName = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    const count = grouped[dateStr].length;
+    const dayLines = grouped[dateStr] || [];
+    const count = dayLines.length;
     html += `<tr class="date-row" data-date="${dateStr}"
         ondragover="dateDragOver(event,'${dateStr}')"
         ondragleave="dateDragLeave(event)"
@@ -315,10 +329,10 @@ function renderSheet() {
 
     // Pad to minimum 30 visible rows with blank add-rows
     const MIN_ROWS = 30;
-    const existingCount = grouped[dateStr].length;
+    const existingCount = dayLines.length;
     const blankCount = Math.max(0, MIN_ROWS - existingCount);
 
-    grouped[dateStr].forEach(l => {
+    dayLines.forEach(l => {
       const farmer   = l.customer_name||(l.orders?.customers?.name)||'';
       const hasTrucker = l.hauler && l.hauler.trim();
       const rowClass = (hasTrucker?'row-assigned':'row-unassigned') + (selectedIds.has(l.id)?' row-selected':'');
@@ -360,7 +374,7 @@ function renderSheet() {
           <td><div class="cell-view${tons===''?' empty':''}" onclick="startEdit(${l.id},'tons')">${tons!==''?tons:'—'}</div></td>
           <td><div class="cell-view${markup===''?' empty':''}" onclick="startEdit(${l.id},'markup')">${markup!==''?('$'+markup):'—'}</div></td>
           <td><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit(${l.id},'commission')">${commission!==''?('$'+commission):'—'}</div></td>
-          <td><button class="del-row-btn" onclick="deleteSingleRow(${l.id})" title="Delete">×</button></td>
+          <td><button class="del-row-btn" data-lid="${l.id}" title="Delete">×</button></td>
         </tr>`;
       rowNum++;
     });
@@ -388,6 +402,10 @@ function renderSheet() {
   });
 
   tbody.innerHTML = html;
+  // Wire delete buttons via data attribute to handle both numeric and string ids
+  tbody.querySelectorAll('.del-row-btn[data-lid]').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); };
+  });
   updateSelectionToolbar();
 }
 
@@ -466,11 +484,12 @@ function updateCheckAllState() {
 
 // ── Delete rows ───────────────────────────────────────
 async function deleteSingleRow(lineId) {
-  const line = allLines.find(l => l.id === lineId);
+  // id may come in as string from data attribute — coerce to match allLines
+  const line = allLines.find(l => String(l.id) === String(lineId));
   if (!line) return;
   // If row was never saved to Supabase, just remove it locally
   if (line._isNew) {
-    allLines = allLines.filter(l => l.id !== lineId);
+    allLines = allLines.filter(l => String(l.id) !== String(lineId));
     applyFilters();
     return;
   }
@@ -485,8 +504,9 @@ async function deleteSelectedRows() {
 }
 
 async function deleteRows(rows) {
-  const ids = rows.map(r => r.id);
+  const ids = rows.map(r => r.id).filter(id => !String(id).startsWith('new_'));
   try {
+    if (!ids.length) { applyFilters(); return; }
     await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=in.(' + ids.join(',') + ')', {
       method: 'DELETE',
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' }
