@@ -16,10 +16,10 @@ const PRODUCTS = ['Wet distillers','Modified distillers','Dry distillers','Loose
 
 // Column index map — offset by 2 for rownum + checkbox cols
 const COL_MAP = {
-  notes:2, delivery_date:3, product:4, load_number:5, customer_name:6,
-  plant:7, hauler:8, loads_on_date:9, tons:10, markup:11, commission:12
+  notes:2, product:3, load_number:4, customer_name:5,
+  plant:6, hauler:7, loads_on_date:8, tons:9, markup:10, commission:11
 };
-const FIELD_ORDER = ['notes','delivery_date','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
+const FIELD_ORDER = ['notes','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
 const FIELD_TYPE = {
   notes:'text', delivery_date:'date', product:'select-product', load_number:'text',
   customer_name:'customer', plant:'plant', hauler:'text',
@@ -297,7 +297,7 @@ function renderSheet() {
           ondragover="dateDragOver(event,'${dateStr}')"
           ondragleave="dateDragLeave(event)"
           ondrop="dateDrop(event,'${dateStr}')">
-          <td colspan="14" style="display:flex;align-items:center;justify-content:space-between">
+          <td colspan="13" style="display:flex;align-items:center;justify-content:space-between">
             <span>${dayName} — 0 loads</span>
             <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
           </td></tr>`;
@@ -357,7 +357,7 @@ function renderSheet() {
         ondragover="dateDragOver(event,'${dateStr}')"
         ondragleave="dateDragLeave(event)"
         ondrop="dateDrop(event,'${dateStr}')">
-        <td colspan="14" style="display:flex;align-items:center;justify-content:space-between">
+        <td colspan="13" style="display:flex;align-items:center;justify-content:space-between">
           <span>${dayName} — ${count} load${count!==1?'s':''}</span>
           <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
         </td></tr>`;
@@ -384,7 +384,7 @@ function renderSheet() {
         : '';
 
       const isCut = cutIds.has(l.id);
-      const rowColor = rowColors[l.id] || '';
+      const rowColor = rowColors[String(l.id)] || '';
       const rowBg = rowColor ? `background:${rowColor} !important;` : '';
       const lid = l.id;
       html += `
@@ -400,7 +400,6 @@ function renderSheet() {
               style="cursor:grab">${rowNum}</td>
           <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange('${lid}',this.checked)" /></td>
           <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div>${noteVal?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="delivery_date"><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit('${lid}','delivery_date')">${formatDate(l.delivery_date)}</div></td>
           <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div>${l.product?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td data-field="load_number"><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
           <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div>${farmer?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
@@ -711,15 +710,10 @@ function startEdit(lineId, field) {
       activeCell = null;
       td.classList.remove('cell-active');
       restoreCell(td, allLines.find(l=>String(l.id)===String(lineId))||{}, field);
-    } else if (e.key==='ArrowRight' && (type==='text'||type==='number'||type==='decimal'||type==='customer')) {
-      // Only navigate if cursor is at end of input
-      if (input.selectionStart === input.value.length) {
-        e.preventDefault(); commitCell(true); moveNext(lineId, field);
-      }
-    } else if (e.key==='ArrowLeft' && (type==='text'||type==='number'||type==='decimal'||type==='customer')) {
-      if (input.selectionStart === 0) {
-        e.preventDefault(); commitCell(true); movePrev(lineId, field);
-      }
+    } else if (e.key==='ArrowRight') {
+      e.preventDefault(); commitCell(true); moveNext(lineId, field);
+    } else if (e.key==='ArrowLeft') {
+      e.preventDefault(); commitCell(true); movePrev(lineId, field);
     } else if (e.key==='ArrowDown') {
       e.preventDefault();
       commitCell(true);
@@ -1502,7 +1496,7 @@ function showColorMenu(e, lineId) {
       ${applyIds.length > 1 ? `Color ${applyIds.length} rows` : 'Row color'}
     </div>
     ${COLOR_OPTIONS.map(opt => `
-      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${applyIds.join(',')}])">
+      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${applyIds.map(id=>`'`+id+`'`).join(',')}])">
         <span class="color-swatch" style="background:${opt.color||'#fff'};border:1px solid ${opt.color?opt.color:'#ccc'}"></span>
         ${opt.label}
         ${applyIds.every(id => rowColors[id] === opt.color) ? ' ✓' : ''}
@@ -1530,7 +1524,7 @@ function showColorMenuForSelected() {
       Color ${ids.length} row${ids.length!==1?'s':''}
     </div>
     ${COLOR_OPTIONS.map(opt => `
-      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${ids.join(',')}])">
+      <div class="color-menu-item" onclick="applyRowColor('${opt.color}',[${ids.map(id=>`'`+id+`'`).join(',')}])">
         <span class="color-swatch" style="background:${opt.color||'#fff'};border:1px solid ${opt.color?opt.color:'#ccc'}"></span>
         ${opt.label}
       </div>`).join('')}
@@ -1550,11 +1544,16 @@ function hideColorMenu() {
 function applyRowColor(color, ids) {
   hideColorMenu();
   ids.forEach(id => {
-    if (color === '') delete rowColors[id];
-    else rowColors[id] = color;
+    const key = String(id);
+    if (color === '') delete rowColors[key];
+    else rowColors[key] = color;
   });
   saveRowColors();
-  renderSheet();
+  // Apply colors directly to rows without full re-render
+  ids.forEach(id => {
+    const tr = document.querySelector(`tr[data-id="${id}"]`);
+    if (tr) tr.style.background = color || '';
+  });
 }
 
 
