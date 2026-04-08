@@ -109,10 +109,19 @@ let dragOverDate  = null;        // date string currently highlighted
 
 // ── Init ──────────────────────────────────────────────
 async function init() {
+  console.log('INIT START');
   renderWeekLabel();
-  await Promise.all([loadOrderLines(), loadOrders(), loadCustomers(), loadPlants()]);
+  await Promise.all([
+    loadOrderLines().catch(e => console.error('loadOrderLines failed:', e)),
+    loadOrders().catch(e => console.error('loadOrders failed:', e)),
+    loadCustomers().catch(e => console.error('loadCustomers failed:', e)),
+    loadPlants().catch(e => console.warn('loadPlants failed:', e)),
+  ]);
+  console.log('DATA LOADED - allLines:', allLines.length, 'filteredLines:', filteredLines.length);
+  console.log('sample line:', allLines[0]);
   renderMetrics();
   applyFilters();
+  console.log('AFTER applyFilters - filteredLines:', filteredLines.length);
   document.addEventListener('keydown', handleKeyboard);
   // Commit active cell when clicking anywhere outside it
   document.addEventListener('mousedown', e => {
@@ -186,9 +195,13 @@ async function loadCustomers() {
 async function loadPlants() {
   try {
     const data = await sb('plants?order=name.asc');
+    // If plants table doesn't exist Supabase returns an error object, not an array
     allPlants = Array.isArray(data) ? data : [];
     populatePlantDropdowns();
-  } catch(e) { console.error('loadPlants error:', e); }
+  } catch(e) {
+    allPlants = [];
+    console.warn('loadPlants: plants table may not exist yet. Create it in Supabase.');
+  }
 }
 
 function populatePlantDropdowns() {
