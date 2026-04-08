@@ -38,6 +38,7 @@
       <button class="admin-tab" id="tab-entry" onclick="showAdminTab('entry')">+ Enter loads from plant</button>
       <button class="admin-tab" id="tab-orders" onclick="showAdminTab('orders')">Farmer orders</button>
       <button class="admin-tab" id="tab-customers" onclick="showAdminTab('customers')">Customers</button>
+      <button class="admin-tab" id="tab-plants" onclick="showAdminTab('plants')">Plants</button>
     </div>
 
     <!-- ══ ALL LOADS TAB ══════════════════════════════ -->
@@ -65,6 +66,9 @@
         <input type="text" id="filter-search" placeholder="Search customer, load #, notes…" oninput="applyFilters()" style="width:220px" />
         <button class="toolbar-btn" onclick="clearFilters()">✕ Clear filters</button>
         <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="undo-edit-btn" onclick="undoEdit()" disabled title="Undo (Ctrl+Z)">↩ Undo</button>
+        <button class="toolbar-btn" id="redo-edit-btn" onclick="redoEdit()" disabled title="Redo (Ctrl+Y)">↪ Redo</button>
+        <div class="toolbar-sep"></div>
         <span id="filter-count" style="font-size:12px;color:#888"></span>
       </div>
 
@@ -86,7 +90,6 @@
               <th class="col-rownum">#</th>
               <th class="col-check"><input type="checkbox" id="check-all" onchange="toggleAllRows(this.checked)" title="Select all" /></th>
               <th style="width:90px">Notes</th>
-              <th style="width:95px">Date</th>
               <th style="width:130px">Product</th>
               <th style="width:115px">Load #</th>
               <th style="width:160px">Customer</th>
@@ -100,7 +103,7 @@
             </tr>
           </thead>
           <tbody id="sheet-body">
-            <tr><td colspan="14" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            <tr><td colspan="13" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -114,7 +117,9 @@
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:1rem">
           <div>
             <label class="field-label">Plant</label>
-            <input type="text" id="entry-plant" placeholder="e.g. Sioux Center" style="width:100%" />
+            <select id="entry-plant" style="width:100%">
+              <option value="">Select plant...</option>
+            </select>
           </div>
           <div>
             <label class="field-label">Product</label>
@@ -238,6 +243,30 @@
       </div>
     </div>
 
+    <!-- ══ PLANTS TAB ══════════════════════════════ -->
+    <div id="panel-plants" style="display:none">
+      <div class="card">
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:1rem">Plant list</div>
+        <div class="sheet-wrap" style="margin-bottom:1rem">
+          <table class="sheet-table">
+            <thead><tr><th>Plant name</th><th style="width:120px"></th></tr></thead>
+            <tbody id="plants-tbody">
+              <tr><td colspan="2" class="table-empty"><span class="spinner"></span> Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a1a;margin-bottom:0.75rem">Add new plant</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+          <div>
+            <label class="field-label">Plant name</label>
+            <input type="text" id="new-plant-name" placeholder="e.g. Sioux Center" style="width:100%" onkeydown="if(event.key==='Enter') addPlant()" />
+          </div>
+          <button class="btn-sm" onclick="addPlant()" style="height:36px">Add</button>
+        </div>
+        <p id="plant-msg" style="font-size:12px;margin-top:0.5rem"></p>
+      </div>
+    </div>
+
   </div><!-- /admin-container -->
 
   <!-- UNDO TOAST -->
@@ -284,6 +313,4 @@
   <!-- ROW COLOR CONTEXT MENU -->
   <div id="color-menu" style="display:none;position:fixed;z-index:500;background:#fff;border:1px solid #dadce0;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;min-width:150px;font-size:13px"></div>
 
-  <script src="admin.js"></script>
-</body>
-</html>
+  <script s
