@@ -266,7 +266,7 @@ function renderSheet() {
           <tr class="blank-row" data-date="${dateStr}">
             <td class="col-rownum" style="color:#ccc">${b + 1}</td>
             <td class="col-check"></td>
-            <td colspan="12" onclick="addBlankRow('${dateStr}')" style="cursor:cell"></td>
+            <td colspan="12" style="cursor:cell"></td>
           </tr>`;
       }
     }
@@ -356,7 +356,7 @@ function renderSheet() {
         <tr class="blank-row" data-date="${dateStr}">
           <td class="col-rownum" style="color:#ccc">${existingCount + b + 1}</td>
           <td class="col-check"></td>
-          <td colspan="12" onclick="addBlankRow('${dateStr}')" style="cursor:cell"></td>
+          <td colspan="12" style="cursor:cell"></td>
         </tr>`;
     }
   });
