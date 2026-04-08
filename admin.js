@@ -112,7 +112,7 @@ async function init() {
   renderWeekLabel();
   await Promise.all([loadOrderLines(), loadOrders(), loadCustomers(), loadPlants()]);
   renderMetrics();
-  renderSheet();
+  applyFilters();
   document.addEventListener('keydown', handleKeyboard);
   // Commit active cell when clicking anywhere outside it
   document.addEventListener('mousedown', e => {
