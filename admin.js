@@ -32,7 +32,6 @@ let filteredLines = [];
 let allOrders     = [];
 let allCustomers  = [];
 let weekOffset    = 0;
-let activeCell    = null;
 let editingCustomerId = null;
 let importedRows  = [];
 let dragFillStart = null;
