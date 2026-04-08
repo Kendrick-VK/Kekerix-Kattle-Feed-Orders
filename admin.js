@@ -67,6 +67,12 @@ async function init() {
     const td = activeCell.td;
     if (!td.contains(e.target)) commitCell(true);
   });
+
+  // Event delegation for delete buttons — works even after partial cell restores
+  document.getElementById('sheet-body').addEventListener('click', e => {
+    const btn = e.target.closest('.del-row-btn[data-lid]');
+    if (btn) { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); }
+  });
   // Backdrop click closes whichever modal is open
   document.getElementById('modal-backdrop').addEventListener('click', () => {
     if (document.getElementById('edit-cust-modal').style.display !== 'none') closeModal();
@@ -409,10 +415,6 @@ function renderSheet() {
   });
 
   tbody.innerHTML = html;
-  // Wire delete buttons via data attribute to handle both numeric and string ids
-  tbody.querySelectorAll('.del-row-btn[data-lid]').forEach(btn => {
-    btn.onclick = (e) => { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); };
-  });
   updateSelectionToolbar();
 }
 
@@ -515,20 +517,28 @@ async function deleteSelectedRows() {
 async function deleteRows(rows) {
   const ids = rows.map(r => r.id).filter(id => !String(id).startsWith('new_'));
   try {
-    if (!ids.length) { applyFilters(); return; }
-    await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=in.(' + ids.join(',') + ')', {
+    if (!ids.length) {
+      // All rows were unsaved — just remove locally
+      rows.forEach(r => { allLines = allLines.filter(l => String(l.id) !== String(r.id)); });
+      applyFilters();
+      return;
+    }
+    const res = await fetch(SUPABASE_URL + '/rest/v1/order_lines?id=in.(' + ids.join(',') + ')', {
       method: 'DELETE',
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' }
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error('Delete failed: ' + (body.message || res.status));
+    }
 
     // Store for undo
     undoBuffer = rows.map(r => ({ ...r }));
 
     // Remove from local state
-    ids.forEach(id => {
-      allLines = allLines.filter(l => String(l.id) !== String(id));
-      selectedIds.delete(id);
-      selectedIds.forEach(sid => { if (String(sid) === String(id)) selectedIds.delete(sid); });
+    rows.forEach(r => {
+      allLines = allLines.filter(l => String(l.id) !== String(r.id));
+      selectedIds.forEach(sid => { if (String(sid) === String(r.id)) selectedIds.delete(sid); });
     });
 
     applyFilters();
