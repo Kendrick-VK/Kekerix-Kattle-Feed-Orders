@@ -823,21 +823,42 @@ async function dismissOrder(id) {
 function renderCustomersTable() {
   const tbody = document.getElementById('customers-tbody');
   if (!tbody) return;
-  if (!allCustomers.length) { tbody.innerHTML='<tr><td colspan="3" class="table-empty">No customers yet.</td></tr>'; return; }
-  tbody.innerHTML = allCustomers.map(c => `
+  if (!allCustomers.length) { tbody.innerHTML='<tr><td colspan="4" class="table-empty">No customers yet.</td></tr>'; return; }
+  const base = window.location.origin + window.location.pathname.replace('admin.html','');
+  tbody.innerHTML = allCustomers.map(c => {
+    const link = base + 'order.html?id=' + c.id;
+    return `
     <tr>
       <td style="padding:7px 10px">${c.name}</td>
       <td style="padding:7px 10px">${c.phone}</td>
+      <td style="padding:7px 10px">
+        <button class="copy-link-btn toolbar-btn" data-link="${link}" data-name="${c.name}" style="font-size:11px">📋 Copy link</button>
+      </td>
       <td style="padding:7px 10px;display:flex;gap:6px">
         <button class="edit-btn" data-cid="${c.id}">Edit</button>
         <button class="del-btn"  data-cid="${c.id}">Remove</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+
   tbody.querySelectorAll('.edit-btn[data-cid]').forEach(btn => {
     btn.onclick = () => openCustomerEdit(parseInt(btn.dataset.cid));
   });
   tbody.querySelectorAll('.del-btn[data-cid]').forEach(btn => {
     btn.onclick = () => deleteCustomer(parseInt(btn.dataset.cid));
+  });
+  tbody.querySelectorAll('.copy-link-btn').forEach(btn => {
+    btn.onclick = () => {
+      navigator.clipboard.writeText(btn.dataset.link).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.color = '#137333';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+      }).catch(() => {
+        // Fallback for older browsers
+        prompt('Copy this link for ' + btn.dataset.name + ':', btn.dataset.link);
+      });
+    };
   });
 }
 
