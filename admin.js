@@ -351,30 +351,31 @@ function renderSheet() {
       const isCut = cutIds.has(l.id);
       const rowColor = rowColors[l.id] || '';
       const rowBg = rowColor ? `background:${rowColor} !important;` : '';
+      const lid = l.id;
       html += `
-        <tr data-id="${l.id}" class="${rowClass}${isCut?' row-cut':''}" ondblclick="startEdit(${l.id},'notes')"
+        <tr data-id="${lid}" class="${rowClass}${isCut?' row-cut':''}" ondblclick="startEdit('${lid}','notes')"
             draggable="false"
-            oncontextmenu="showColorMenu(event,${l.id})"
+            oncontextmenu="showColorMenu(event,'${lid}')"
             style="${rowBg}">
           <td class="col-rownum"
-              onclick="toggleRowSelect(${l.id},event)"
+              onclick="toggleRowSelect('${lid}',event)"
               draggable="true"
-              onmousedown="rowDragMousedown(event,${l.id})"
-              ondragstart="rowDragStart(event,${l.id})"
+              onmousedown="rowDragMousedown(event,'${lid}')"
+              ondragstart="rowDragStart(event,'${lid}')"
               style="cursor:grab">${rowNum}</td>
-          <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange(${l.id},this.checked)" /></td>
-          <td class="col-notes-td"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit(${l.id},'notes')">${noteVal||''}</div></td>
-          <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit(${l.id},'delivery_date')">${formatDate(l.delivery_date)}</div></td>
-          <td><div class="cell-view" onclick="startEdit(${l.id},'product')">${l.product||''}</div></td>
-          <td><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit(${l.id},'load_number')">${l.load_number||'—'}</div></td>
-          <td><div class="cell-view${!farmer?' empty':''}" onclick="startEdit(${l.id},'customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div></td>
-          <td><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit(${l.id},'plant')">${l.plant||'—'}</div></td>
-          <td><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit(${l.id},'hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div></td>
-          <td><div class="cell-view" onclick="startEdit(${l.id},'loads_on_date')">${l.loads_on_date||1}</div></td>
-          <td><div class="cell-view${tons===''?' empty':''}" onclick="startEdit(${l.id},'tons')">${tons!==''?tons:'—'}</div></td>
-          <td><div class="cell-view${markup===''?' empty':''}" onclick="startEdit(${l.id},'markup')">${markup!==''?('$'+markup):'—'}</div></td>
-          <td><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit(${l.id},'commission')">${commission!==''?('$'+commission):'—'}</div></td>
-          <td><button class="del-row-btn" data-lid="${l.id}" title="Delete">×</button></td>
+          <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange('${lid}',this.checked)" /></td>
+          <td class="col-notes-td"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div></td>
+          <td><div class="cell-view${!l.delivery_date?' empty':''}" onclick="startEdit('${lid}','delivery_date')">${formatDate(l.delivery_date)}</div></td>
+          <td><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div></td>
+          <td><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
+          <td><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div></td>
+          <td><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div></td>
+          <td><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div></td>
+          <td><div class="cell-view" onclick="startEdit('${lid}','loads_on_date')">${l.loads_on_date||1}</div></td>
+          <td><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div></td>
+          <td><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div></td>
+          <td><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div></td>
+          <td><button class="del-row-btn" data-lid="${lid}" title="Delete">×</button></td>
         </tr>`;
       rowNum++;
     });
@@ -422,26 +423,28 @@ function getFarmerPendingOrder(customerName, product, deliveryDate) {
 
 // ── Row selection ─────────────────────────────────────
 function toggleRowSelect(lineId, e) {
+  // Coerce to match stored type
+  const matchId = filteredLines.find(l => String(l.id) === String(lineId))?.id ?? lineId;
   if (e.shiftKey) {
-    // range-select between last selected and this row
     const ids = filteredLines.map(l => l.id);
-    const clickIdx = ids.indexOf(lineId);
+    const clickIdx = ids.indexOf(matchId);
     const lastSel  = [...selectedIds].map(id => ids.indexOf(id)).filter(i => i >= 0);
     if (lastSel.length) {
       const anchor = lastSel[lastSel.length - 1];
       const [a, b] = [Math.min(anchor, clickIdx), Math.max(anchor, clickIdx)];
       for (let i = a; i <= b; i++) selectedIds.add(ids[i]);
     } else {
-      selectedIds.has(lineId) ? selectedIds.delete(lineId) : selectedIds.add(lineId);
+      selectedIds.has(matchId) ? selectedIds.delete(matchId) : selectedIds.add(matchId);
     }
   } else {
-    selectedIds.has(lineId) ? selectedIds.delete(lineId) : selectedIds.add(lineId);
+    selectedIds.has(matchId) ? selectedIds.delete(matchId) : selectedIds.add(matchId);
   }
   renderSheet();
 }
 
 function onRowCheckChange(lineId, checked) {
-  checked ? selectedIds.add(lineId) : selectedIds.delete(lineId);
+  const matchId = filteredLines.find(l => String(l.id) === String(lineId))?.id ?? lineId;
+  checked ? selectedIds.add(matchId) : selectedIds.delete(matchId);
   updateSelectionToolbar();
   updateCheckAllState();
 }
@@ -1339,9 +1342,8 @@ function showColorMenu(e, lineId) {
   e.preventDefault();
   e.stopPropagation();
   colorMenuTargetId = lineId;
-
-  // If right-clicking a selected row, menu applies to all selected
-  const applyIds = selectedIds.has(lineId) && selectedIds.size > 1
+  const matchId = filteredLines.find(l => String(l.id) === String(lineId))?.id ?? lineId;
+  const applyIds = selectedIds.has(matchId) && selectedIds.size > 1
     ? [...selectedIds]
     : [lineId];
 
