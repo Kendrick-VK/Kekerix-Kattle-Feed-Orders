@@ -266,7 +266,18 @@ function renderSheet() {
           <tr class="blank-row" data-date="${dateStr}">
             <td class="col-rownum" style="color:#ccc">${b + 1}</td>
             <td class="col-check"></td>
-            <td colspan="12" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','delivery_date')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','loads_on_date')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
+            <td></td>
           </tr>`;
       }
     }
@@ -1296,6 +1307,11 @@ function applyRowColor(color, ids) {
 
 
 // ── Add blank row ─────────────────────────────────────
+async function addBlankRowAndEdit(dateStr, field) {
+  const newId = await addBlankRow(dateStr);
+  if (newId) setTimeout(() => startEdit(newId, field), 80);
+}
+
 async function addBlankRow(dateStr) {
   try {
     const result = await sb('order_lines', {
@@ -1313,9 +1329,8 @@ async function addBlankRow(dateStr) {
     if (!newLine || !newLine.id) throw new Error('Failed to create row');
     allLines.push(newLine);
     applyFilters();
-    // Auto-focus the load number cell on the new row
-    setTimeout(() => startEdit(newLine.id, 'load_number'), 80);
-  } catch(e) { alert('Error adding row: ' + e.message); }
+    return newLine.id;
+  } catch(e) { alert('Error adding row: ' + e.message); return null; }
 }
 
 // ── Plants tab ────────────────────────────────────────
