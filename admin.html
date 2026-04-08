@@ -72,6 +72,7 @@
       <div class="toolbar" id="selection-toolbar" style="display:none;background:#e8f0fe;border-bottom-color:#a8c7fa">
         <span id="selection-count" style="font-size:12px;font-weight:500;color:#1a73e8"></span>
         <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" onclick="showColorMenuForSelected()">🎨 Color rows</button>
         <button class="toolbar-btn" onclick="cutSelectedRows()">✂ Cut (Ctrl+X)</button>
         <button class="toolbar-btn" onclick="openPasteModal()" id="paste-btn" style="display:none">📋 Paste to date (Ctrl+V)</button>
         <button class="toolbar-btn danger" onclick="deleteSelectedRows()">🗑 Delete selected</button>
@@ -279,6 +280,9 @@
       <button class="btn-primary" onclick="confirmPaste()" style="flex:2;margin-top:0;justify-content:center">Move loads</button>
     </div>
   </div>
+
+  <!-- ROW COLOR CONTEXT MENU -->
+  <div id="color-menu" style="display:none;position:fixed;z-index:500;background:#fff;border:1px solid #dadce0;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);padding:4px 0;min-width:150px;font-size:13px"></div>
 
   <script src="admin.js"></script>
 </body>
