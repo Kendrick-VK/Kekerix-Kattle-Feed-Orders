@@ -44,6 +44,11 @@
     <!-- ══ ALL LOADS TAB ══════════════════════════════ -->
     <div id="panel-loads">
 
+      <!-- Cell reference box -->
+      <div class="toolbar" style="padding:4px 8px;gap:6px;border-bottom:none">
+        <div id="cell-ref-box" style="width:60px;height:24px;border:1px solid #dadce0;border-radius:3px;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:500;color:#444;background:#fff;flex-shrink:0"></div>
+        <div style="width:1px;height:20px;background:#dadce0"></div>
+      </div>
       <!-- Toolbar row 1: filters -->
       <div class="toolbar">
         <select id="filter-product" onchange="applyFilters()" style="width:150px">
@@ -86,6 +91,22 @@
       <div class="sheet-wrap">
         <table class="sheet-table" id="sheet-table">
           <thead>
+            <!-- Column letter row -->
+            <tr class="col-letter-row">
+              <th class="col-rownum"></th>
+              <th class="col-check"></th>
+              <th style="width:90px">A</th>
+              <th style="width:130px">B</th>
+              <th style="width:115px">C</th>
+              <th style="width:160px">D</th>
+              <th style="width:120px">E</th>
+              <th style="width:130px">F</th>
+              <th style="width:65px">G</th>
+              <th style="width:75px">H</th>
+              <th style="width:90px">I</th>
+              <th style="width:30px"></th>
+            </tr>
+            <!-- Column name row -->
             <tr>
               <th class="col-rownum">#</th>
               <th class="col-check"><input type="checkbox" id="check-all" onchange="toggleAllRows(this.checked)" title="Select all" /></th>
