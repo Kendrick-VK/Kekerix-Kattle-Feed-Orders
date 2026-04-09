@@ -319,7 +319,7 @@ function renderMetrics() {
   const { monday, friday } = getWeekRange();
   const ws = monday.toISOString().split('T')[0];
   const we = friday.toISOString().split('T')[0];
-  const week = allLines.filter(l => l.delivery_date>=ws && l.delivery_date<=we);
+  const week = allLines.filter(l => l.delivery_date>=ws && l.delivery_date<=we && l.load_number);
   const total = week.length;
   const totalCommission = week.reduce((a,l) => a+(parseFloat(l.commission)||0), 0);
   const pendingLoads = allOrders
@@ -414,7 +414,7 @@ function renderSheet() {
     const d = new Date(dateStr+'T00:00:00');
     const dayName = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
     const dayLines = grouped[dateStr] || [];
-    const count = dayLines.length;
+    const count = dayLines.filter(l => l.load_number).length;
     html += `<tr class="date-row" data-date="${dateStr}"
         ondragover="dateDragOver(event,'${dateStr}')"
         ondragleave="dateDragLeave(event)"
@@ -718,7 +718,62 @@ function selectCell(lineId, field) {
 // Open a cell for editing (puts input inside td)
 function startEdit(lineId, field) {
   if (activeCell && String(activeCell.lineId) === String(lineId) && activeCell.field === field) return;
-  if (activeCell) saveActiveCell();
+
+  // If there's an active cell, save it async but don't wait — just restore its display immediately
+  if (activeCell) {
+    const prev = activeCell;
+    activeCell = null;
+    prev.td.classList.remove('cell-active');
+    const prevLine = allLines.find(l => String(l.id) === String(prev.lineId));
+    if (prevLine) {
+      // Update the value in memory
+      let newVal;
+      if (prev.type==='number') newVal = parseInt(prev.input.value)||1;
+      else if (prev.type==='decimal') newVal = prev.input.value!=='' ? parseFloat(parseFloat(prev.input.value).toFixed(2)) : null;
+      else newVal = prev.input.value.trim();
+      const strNew = newVal!=null?String(newVal):'';
+      const strOld = prev.oldVal!=null?String(prev.oldVal):'';
+      prevLine[prev.field] = newVal;
+      restoreCell(prev.td, prevLine, prev.field);
+      // Save to DB in background if changed
+      if (strNew !== strOld) {
+        pushHistory({ lineId: prev.lineId, field: prev.field, oldVal: prev.oldVal, newVal });
+        const payload = { [prev.field]: newVal };
+        if (prev.field==='hauler' && newVal && !prev.oldVal) payload.status = 'Sent out';
+        if (!prevLine._isNew) {
+          sb('order_lines?id=eq.'+prev.lineId, {
+            method:'PATCH', headers:{'Prefer':'return=minimal'},
+            body: JSON.stringify(payload)
+          }).catch(e => console.error('bg save error:', e));
+        } else {
+          // Insert new row
+          const ins = {
+            delivery_date:prevLine.delivery_date, product:prevLine.product||null,
+            load_number:prevLine.load_number||null, customer_name:prevLine.customer_name||null,
+            plant:prevLine.plant||null, hauler:prevLine.hauler||null,
+            loads_on_date:prevLine.loads_on_date||1, tons:prevLine.tons||null,
+            markup:prevLine.markup||null, commission:prevLine.commission||null,
+            notes:prevLine.notes||null, status:'Scheduled', total_loads:1,
+            [prev.field]: newVal
+          };
+          sb('order_lines', {method:'POST',body:JSON.stringify(ins)})
+            .then(r => {
+              const saved = Array.isArray(r)?r[0]:r;
+              if (saved&&saved.id) {
+                const idx = allLines.findIndex(l=>String(l.id)===String(prev.lineId));
+                if (idx>=0) {
+                  const oldTempId = allLines[idx].id;
+                  allLines[idx] = {...allLines[idx],...saved,_isNew:false};
+                  const tr = document.querySelector(`tr[data-id="${oldTempId}"]`);
+                  if (tr) tr.dataset.id = saved.id;
+                }
+              }
+            }).catch(e=>console.error('bg insert error:',e));
+        }
+        renderMetrics();
+      }
+    }
+  }
 
   // Select this cell first
   if (activeTd) activeTd.classList.remove('cell-selected');
@@ -783,29 +838,20 @@ function startEdit(lineId, field) {
       cancelEdit();
     } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
       e.preventDefault();
-      const _f1 = field, _l1 = lineId;
-      saveActiveCell();
-      setTimeout(() => moveRow(_l1, _f1, 1), 20);
+      moveRow(lineId, field, 1);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const _f2 = field, _l2 = lineId;
-      saveActiveCell();
-      setTimeout(() => moveRow(_l2, _f2, -1), 20);
+      moveRow(lineId, field, -1);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const _f3 = field, _l3 = lineId;
-      saveActiveCell();
-      setTimeout(() => moveCol(_l3, _f3, 1), 20);
+      moveCol(lineId, field, 1);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const _f4 = field, _l4 = lineId;
-      saveActiveCell();
-      setTimeout(() => moveCol(_l4, _f4, -1), 20);
+      moveCol(lineId, field, -1);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const _f5 = field, _l5 = lineId, _shift = e.shiftKey;
-      saveActiveCell();
-      setTimeout(() => _shift ? moveCol(_l5, _f5, -1) : moveCol(_l5, _f5, 1), 20);
+      if (e.shiftKey) moveCol(lineId, field, -1);
+      else moveCol(lineId, field, 1);
     }
   };
 
@@ -892,6 +938,8 @@ async function saveActiveCell() {
     } catch(e) { console.error('Save error:', e); }
 
     renderMetrics();
+    // Only do a full re-render if the date changed (row moves to different day)
+    if (field === 'delivery_date') applyFilters();
   }
 }
 
