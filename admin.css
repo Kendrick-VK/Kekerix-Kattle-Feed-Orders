@@ -493,12 +493,14 @@ tr.date-row.drag-target td {
 }
 td:hover .fill-handle,
 td.cell-active .fill-handle { display: block; }
-/* Make the hit area bigger */
 .fill-handle::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -6px;
+  cursor: crosshair;
 }
+/* Don't change cursor on the rest of the page during fill */
+.sheet-table td { cursor: cell; }
 
 /* Rows highlighted during fill drag */
 tr.fill-highlight td { background: #e8f0fe !important; }
