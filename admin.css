@@ -504,6 +504,45 @@ td.cell-active .fill-handle { display: block; }
 
 /* Rows highlighted during fill drag */
 tr.fill-highlight td { background: #e8f0fe !important; }
+/* Cell-level fill highlight */
+td.fill-highlight-cell {
+  background: #c5d8fb !important;
+  outline: 1px solid #1a73e8;
+  outline-offset: -1px;
+}
+
+
+/* ── Column letter row (A, B, C...) ─────────────── */
+tr.col-letter-row th {
+  background: #f8f9fa;
+  color: #999;
+  font-size: 10px;
+  font-weight: 400;
+  text-align: center;
+  padding: 2px 0;
+  border-bottom: 1px solid #e0e0e0;
+  height: 16px;
+  letter-spacing: 0.5px;
+}
+tr.col-letter-row th.col-rownum,
+tr.col-letter-row th.col-check { background: #f8f9fa; }
+
+/* Highlight active column letter when a cell is selected */
+tr.col-letter-row th.col-active {
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 600;
+}
+
+
+/* ── Range selection ─────────────────────────────── */
+td.range-selected {
+  background: #c8d8fb !important;
+  outline: 1px solid #1a73e8;
+  outline-offset: -1px;
+}
+/* Fill handle shown on bottom-right cell of range */
+td.range-fill-handle .fill-handle { display: block !important; }
 
 /* ── Responsive ──────────────────────────────────── */
 @media (max-width: 600px) {
