@@ -157,9 +157,8 @@ async function init() {
     fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName], sourceRowIdx };
     fillHandleActive = true;
     fillCurrentEndIdx = sourceRowIdx;
-    document.body.style.cursor = 'crosshair';
     document.body.style.userSelect = 'none';
-    // Wire mouseenter on every row below source
+    // Wire mouseenter on EVERY row below source (including blank rows)
     allRows.forEach((r, i) => {
       if (i <= sourceRowIdx) return;
       r._fillEnter = () => {
@@ -381,19 +380,20 @@ function renderSheet() {
             <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
           </td></tr>`;
       for (let b = 0; b < 30; b++) {
+        const blankId = 'blank_' + dateStr + '_' + b;
         html += `
-          <tr class="blank-row" data-date="${dateStr}">
+          <tr class="blank-row" data-id="${blankId}" data-date="${dateStr}" data-blank="1">
             <td class="col-rownum" style="color:#ccc">${b + 1}</td>
             <td class="col-check"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell" data-field="notes"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell" data-field="product"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell" data-field="load_number"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell" data-field="customer_name"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell" data-field="plant"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell" data-field="hauler"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell" data-field="tons"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell" data-field="markup"></td>
+            <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell" data-field="commission"></td>
             <td></td>
           </tr>`;
       }
@@ -492,19 +492,20 @@ function renderSheet() {
 
     // Add blank placeholder rows to reach minimum 30
     for (let b = 0; b < blankCount; b++) {
+      const blankId = 'blank_' + dateStr + '_' + b;
       html += `
-        <tr class="blank-row" data-date="${dateStr}">
+        <tr class="blank-row" data-id="${blankId}" data-date="${dateStr}" data-blank="1">
           <td class="col-rownum" style="color:#ccc">${existingCount + b + 1}</td>
           <td class="col-check"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','notes')" style="cursor:cell" data-field="notes"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','product')" style="cursor:cell" data-field="product"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','load_number')" style="cursor:cell" data-field="load_number"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell" data-field="customer_name"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell" data-field="plant"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell" data-field="hauler"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell" data-field="tons"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell" data-field="markup"></td>
+          <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell" data-field="commission"></td>
           <td></td>
         </tr>`;
     }
@@ -1434,36 +1435,54 @@ function onFillHandleEnd(e) {
   fillHandleSource = null;
 
   // Apply value to each target row — auto-increment load numbers
-  const doFill = async () => { for (let i = 0; i < targets.length; i++) {
-    const tr = targets[i];
-    const lid = tr.dataset.id;
-    const line = allLines.find(l => String(l.id) === String(lid));
-    if (!line) continue;
-    const oldVal = line[field];
+  const doFill = async () => {
+    for (let i = 0; i < targets.length; i++) {
+      const tr = targets[i];
+      const lid = tr.dataset.id;
+      const isBlank = tr.dataset.blank === '1';
+      const dateForRow = tr.dataset.date;
 
-    let fillVal = value;
-    // Auto-increment load_number
-    if (field === 'load_number' && value) {
-      fillVal = incrementLoadNumber(value, i + 1);
-    }
+      let fillVal = value;
+      if (field === 'load_number' && value) {
+        fillVal = incrementLoadNumber(value, i + 1);
+      }
 
-    line[field] = fillVal;
-
-    if (String(oldVal) !== String(fillVal)) {
-      if (!line._isNew) {
+      if (isBlank) {
+        // Create a real row for this blank slot then fill it
         try {
-          await sb('order_lines?id=eq.' + lid, {
-            method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ [field]: fillVal })
-          });
-        } catch(err) { console.error('Fill save error:', err); }
+          const insertPayload = {
+            delivery_date: dateForRow,
+            [field]: fillVal,
+            loads_on_date: 1, total_loads: 1, status: 'Scheduled'
+          };
+          const result = await sb('order_lines', { method: 'POST', body: JSON.stringify(insertPayload) });
+          const saved = Array.isArray(result) ? result[0] : result;
+          if (saved && saved.id) {
+            allLines.push({ ...saved });
+          }
+        } catch(err) { console.error('Fill blank row error:', err); }
+      } else {
+        const line = allLines.find(l => String(l.id) === String(lid));
+        if (!line) continue;
+        const oldVal = line[field];
+        line[field] = fillVal;
+        if (String(oldVal) !== String(fillVal) && !line._isNew) {
+          try {
+            await sb('order_lines?id=eq.' + lid, {
+              method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ [field]: fillVal })
+            });
+          } catch(err) { console.error('Fill save error:', err); }
+        }
+        // Update cell display immediately
+        const colIdx = COL_MAP[field];
+        const td = tr.children[colIdx];
+        if (td) { const line2 = allLines.find(l=>String(l.id)===String(lid)); if(line2) restoreCell(td, line2, field); }
       }
     }
-    // Update cell display
-    const colIdx = COL_MAP[field];
-    const td = tr.children[colIdx];
-    if (td) restoreCell(td, line, field);
-  } }; doFill();
+    // Re-render to show newly created rows
+    applyFilters();
+  }; doFill();
 }
 
 function incrementLoadNumber(base, steps) {
