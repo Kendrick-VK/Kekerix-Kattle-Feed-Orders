@@ -17,13 +17,13 @@ const PRODUCTS = ['Wet distillers','Modified distillers','Dry distillers','Loose
 // Column index map — offset by 2 for rownum + checkbox cols
 const COL_MAP = {
   notes:2, product:3, load_number:4, customer_name:5,
-  plant:6, hauler:7, loads_on_date:8, tons:9, markup:10, commission:11
+  plant:6, hauler:7, tons:8, markup:9, commission:10
 };
-const FIELD_ORDER = ['notes','product','load_number','customer_name','plant','hauler','loads_on_date','tons','markup','commission'];
+const FIELD_ORDER = ['notes','product','load_number','customer_name','plant','hauler','tons','markup','commission'];
 const FIELD_TYPE = {
   notes:'text', delivery_date:'date', product:'select-product', load_number:'text',
   customer_name:'customer', plant:'plant', hauler:'text',
-  loads_on_date:'number', tons:'decimal', markup:'decimal', commission:'decimal'
+  tons:'decimal', markup:'decimal', commission:'decimal'
 };
 
 let allPlants     = [];
@@ -361,7 +361,7 @@ function renderSheet() {
           ondragover="dateDragOver(event,'${dateStr}')"
           ondragleave="dateDragLeave(event)"
           ondrop="dateDrop(event,'${dateStr}')">
-          <td colspan="13" style="display:flex;align-items:center;justify-content:space-between">
+          <td colspan="12" style="display:flex;align-items:center;justify-content:space-between">
             <span>${dayName} — 0 loads</span>
             <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
           </td></tr>`;
@@ -376,7 +376,6 @@ function renderSheet() {
             <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
-            <td onclick="addBlankRowAndEdit('${dateStr}','loads_on_date')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
             <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
@@ -420,7 +419,7 @@ function renderSheet() {
         ondragover="dateDragOver(event,'${dateStr}')"
         ondragleave="dateDragLeave(event)"
         ondrop="dateDrop(event,'${dateStr}')">
-        <td colspan="13" style="display:flex;align-items:center;justify-content:space-between">
+        <td colspan="12" style="display:flex;align-items:center;justify-content:space-between">
           <span>${dayName} — ${count} load${count!==1?'s':''}</span>
           <button class="add-row-btn" onclick="addBlankRow('${dateStr}')">+ Add load</button>
         </td></tr>`;
@@ -468,7 +467,6 @@ function renderSheet() {
           <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div>${farmer?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div>${l.plant?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div>${hasTrucker?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="loads_on_date"><div class="cell-view" onclick="startEdit('${lid}','loads_on_date')">${l.loads_on_date||1}</div></td>
           <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div>${tons!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div>${markup!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
           <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div>${commission!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
@@ -489,7 +487,6 @@ function renderSheet() {
           <td onclick="addBlankRowAndEdit('${dateStr}','customer_name')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','plant')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','hauler')" style="cursor:cell"></td>
-          <td onclick="addBlankRowAndEdit('${dateStr}','loads_on_date')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','tons')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','markup')" style="cursor:cell"></td>
           <td onclick="addBlankRowAndEdit('${dateStr}','commission')" style="cursor:cell"></td>
@@ -1398,11 +1395,15 @@ async function deleteCustomer(id) {
 // ── Fill handle (drag value down) ─────────────────────
 function onFillHandleMove(e) {
   if (!fillHandleSource) return;
-  // Highlight rows below the source
   const tbody = document.getElementById('sheet-body');
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
   const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
-  rows.forEach((r, i) => r.classList.toggle('fill-highlight', i > sourceIdx && e.clientY >= r.getBoundingClientRect().top));
+  rows.forEach((r, i) => {
+    if (i <= sourceIdx) { r.classList.remove('fill-highlight'); return; }
+    const rect = r.getBoundingClientRect();
+    // Use center of row for hit test
+    r.classList.toggle('fill-highlight', rect.top < e.clientY && rect.bottom > 0);
+  });
 }
 
 function onFillHandleEnd(e) {
@@ -1414,9 +1415,17 @@ function onFillHandleEnd(e) {
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
   const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
 
-  // Collect target rows (highlighted ones below source)
-  const targets = rows.filter((r, i) => i > sourceIdx && r.classList.contains('fill-highlight'));
+  // Collect ALL rows below source up to where mouse was released
+  const allRealRows = rows.filter((r, i) => i > sourceIdx);
+  // Find the last highlighted row
+  let lastHighlightIdx = -1;
+  rows.forEach((r, i) => { if (r.classList.contains('fill-highlight')) lastHighlightIdx = i; });
   rows.forEach(r => r.classList.remove('fill-highlight'));
+
+  // All rows from source+1 to lastHighlightIdx
+  const targets = lastHighlightIdx > sourceIdx
+    ? rows.filter((r, i) => i > sourceIdx && i <= lastHighlightIdx)
+    : [];
 
   if (!targets.length) { fillHandleSource = null; return; }
 
