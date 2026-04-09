@@ -37,7 +37,8 @@ let importedRows  = [];
 let dragFillStart = null;
 
 // Fill handle (drag cell value down)
-let fillHandleSource = null;  // { lineId, field, value }
+let fillHandleSource = null;  // { lineId, field, value, sourceRowIdx }
+let fillHandleActive = false;
 
 // Multi-select & undo
 let selectedIds   = new Set();
@@ -141,17 +142,22 @@ async function init() {
     if (!handle) return;
     e.preventDefault();
     e.stopPropagation();
-    e.stopImmediatePropagation(); // prevent saveActiveCell from firing
+    e.stopImmediatePropagation();
     const td = handle.closest('td');
     const tr = handle.closest('tr');
     if (!td || !tr) return;
     const lid = tr.dataset.id;
-    // Find which field this td is
     const fieldName = td.dataset.field;
     if (!lid || !fieldName) return;
     const line = allLines.find(l => String(l.id) === String(lid));
     if (!line) return;
-    fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName] };
+    // Get source row index among ALL real rows
+    const allRows = [...document.getElementById('sheet-body').querySelectorAll('tr[data-id]')];
+    const sourceRowIdx = allRows.findIndex(r => r.dataset.id === String(lid));
+    fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName], sourceRowIdx };
+    fillHandleActive = true;
+    document.body.style.cursor = 'crosshair';
+    document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onFillHandleMove);
     document.addEventListener('mouseup',   onFillHandleEnd);
   });
@@ -461,15 +467,15 @@ function renderSheet() {
               ondragstart="rowDragStart(event,'${lid}')"
               style="cursor:grab">${rowNum}</td>
           <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange('${lid}',this.checked)" /></td>
-          <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div>${noteVal?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div>${l.product?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
           <td data-field="load_number"><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
-          <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div>${farmer?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div>${l.plant?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div>${hasTrucker?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div>${tons!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div>${markup!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
-          <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div>${commission!==''?'<span class="fill-handle" title="Drag to fill down"></span>':''}</td>
+          <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
           <td><button class="del-row-btn" data-lid="${lid}" title="Delete">×</button></td>
         </tr>`;
       rowNum++;
@@ -678,8 +684,7 @@ function restoreCell(td, line, field) {
   else if (field === 'markup') display = markup !== '' ? ('$'+markup) : '—';
   else if (field === 'loads_on_date') display = String(val || 1);
   else display = (val != null && val !== '') ? String(val) : '—';
-  const hasFill = !isEmpty && field !== 'loads_on_date';
-  td.innerHTML = `<div class="cell-view${isEmpty?' empty':''}" onclick="startEdit('${lid}','${field}')">${display}</div>${hasFill?'<span class="fill-handle" title="Drag to fill down"></span>':''}`;
+  td.innerHTML = `<div class="cell-view${isEmpty?' empty':''}" onclick="startEdit('${lid}','${field}')">${display}</div><span class="fill-handle" title="Drag to fill down"></span>`;
 }
 
 // ── Inline editing ────────────────────────────────────
@@ -1394,38 +1399,36 @@ async function deleteCustomer(id) {
 
 // ── Fill handle (drag value down) ─────────────────────
 function onFillHandleMove(e) {
-  if (!fillHandleSource) return;
+  if (!fillHandleSource || !fillHandleActive) return;
   const tbody = document.getElementById('sheet-body');
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
-  const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
+  const { sourceRowIdx } = fillHandleSource;
+
   rows.forEach((r, i) => {
-    if (i <= sourceIdx) { r.classList.remove('fill-highlight'); return; }
+    if (i <= sourceRowIdx) {
+      r.classList.remove('fill-highlight');
+      return;
+    }
     const rect = r.getBoundingClientRect();
-    // Use center of row for hit test
-    r.classList.toggle('fill-highlight', rect.top < e.clientY && rect.bottom > 0);
+    // Highlight if mouse Y is past the top of this row
+    r.classList.toggle('fill-highlight', e.clientY > rect.top);
   });
 }
 
 function onFillHandleEnd(e) {
   document.removeEventListener('mousemove', onFillHandleMove);
   document.removeEventListener('mouseup',   onFillHandleEnd);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  fillHandleActive = false;
   if (!fillHandleSource) return;
 
   const tbody = document.getElementById('sheet-body');
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
-  const sourceIdx = rows.findIndex(r => r.dataset.id === String(fillHandleSource.lineId));
+  const { sourceRowIdx } = fillHandleSource;
 
-  // Collect ALL rows below source up to where mouse was released
-  const allRealRows = rows.filter((r, i) => i > sourceIdx);
-  // Find the last highlighted row
-  let lastHighlightIdx = -1;
-  rows.forEach((r, i) => { if (r.classList.contains('fill-highlight')) lastHighlightIdx = i; });
+  const targets = rows.filter((r, i) => i > sourceRowIdx && r.classList.contains('fill-highlight'));
   rows.forEach(r => r.classList.remove('fill-highlight'));
-
-  // All rows from source+1 to lastHighlightIdx
-  const targets = lastHighlightIdx > sourceIdx
-    ? rows.filter((r, i) => i > sourceIdx && i <= lastHighlightIdx)
-    : [];
 
   if (!targets.length) { fillHandleSource = null; return; }
 
