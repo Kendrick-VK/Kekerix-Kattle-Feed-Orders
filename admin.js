@@ -1401,17 +1401,31 @@ async function deleteCustomer(id) {
 function onFillHandleMove(e) {
   if (!fillHandleSource || !fillHandleActive) return;
   const tbody = document.getElementById('sheet-body');
-  const rows = [...tbody.querySelectorAll('tr[data-id]')];
+  const wrap  = tbody.closest('.sheet-wrap') || tbody.parentElement;
+  const rows  = [...tbody.querySelectorAll('tr[data-id]')];
   const { sourceRowIdx } = fillHandleSource;
 
+  // Auto-scroll the sheet-wrap when mouse is near the bottom edge
+  const wrapRect = wrap.getBoundingClientRect();
+  const scrollZone = 60; // px from edge to start scrolling
+  if (e.clientY > wrapRect.bottom - scrollZone) {
+    wrap.scrollTop += 8;
+  } else if (e.clientY < wrapRect.top + scrollZone && e.clientY > wrapRect.top) {
+    wrap.scrollTop -= 8;
+  }
+
+  // Highlight rows: use index-based approach so scrolled-off rows still get highlighted
+  // Find which row index the mouse is currently over
+  let hoverIdx = sourceRowIdx; // default to source if mouse hasn't moved past it
   rows.forEach((r, i) => {
-    if (i <= sourceRowIdx) {
-      r.classList.remove('fill-highlight');
-      return;
-    }
+    if (i <= sourceRowIdx) return;
     const rect = r.getBoundingClientRect();
-    // Highlight if mouse Y is past the top of this row
-    r.classList.toggle('fill-highlight', e.clientY > rect.top);
+    if (e.clientY > rect.top) hoverIdx = i;
+  });
+
+  // Highlight all rows from source+1 to hoverIdx
+  rows.forEach((r, i) => {
+    r.classList.toggle('fill-highlight', i > sourceRowIdx && i <= hoverIdx);
   });
 }
 
