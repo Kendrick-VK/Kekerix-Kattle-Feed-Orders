@@ -39,6 +39,7 @@ let dragFillStart = null;
 // Fill handle (drag cell value down)
 let fillHandleSource = null;  // { lineId, field, value, sourceRowIdx }
 let fillHandleActive = false;
+let fillCurrentEndIdx = -1;
 
 // Multi-select & undo
 let selectedIds   = new Set();
@@ -136,7 +137,7 @@ async function init() {
     if (btn) { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); }
   });
 
-  // Fill handle — mousedown on .fill-handle dot starts a drag-fill
+  // Fill handle — use mousedown + mouseenter on rows (like Google Sheets)
   document.getElementById('sheet-body').addEventListener('mousedown', e => {
     const handle = e.target.closest('.fill-handle');
     if (!handle) return;
@@ -151,15 +152,23 @@ async function init() {
     if (!lid || !fieldName) return;
     const line = allLines.find(l => String(l.id) === String(lid));
     if (!line) return;
-    // Get source row index among ALL real rows
     const allRows = [...document.getElementById('sheet-body').querySelectorAll('tr[data-id]')];
     const sourceRowIdx = allRows.findIndex(r => r.dataset.id === String(lid));
     fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName], sourceRowIdx };
     fillHandleActive = true;
+    fillCurrentEndIdx = sourceRowIdx;
     document.body.style.cursor = 'crosshair';
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onFillHandleMove);
-    document.addEventListener('mouseup',   onFillHandleEnd);
+    // Wire mouseenter on every row below source
+    allRows.forEach((r, i) => {
+      if (i <= sourceRowIdx) return;
+      r._fillEnter = () => {
+        fillCurrentEndIdx = i;
+        allRows.forEach((rr, ii) => rr.classList.toggle('fill-highlight', ii > sourceRowIdx && ii <= fillCurrentEndIdx));
+      };
+      r.addEventListener('mouseenter', r._fillEnter);
+    });
+    document.addEventListener('mouseup', onFillHandleEnd);
   });
   // Backdrop click closes whichever modal is open
   document.getElementById('modal-backdrop').addEventListener('click', () => {
@@ -1399,39 +1408,11 @@ async function deleteCustomer(id) {
 
 // ── Fill handle (drag value down) ─────────────────────
 function onFillHandleMove(e) {
-  if (!fillHandleSource || !fillHandleActive) return;
-  const tbody = document.getElementById('sheet-body');
-  const wrap  = tbody.closest('.sheet-wrap') || tbody.parentElement;
-  const rows  = [...tbody.querySelectorAll('tr[data-id]')];
-  const { sourceRowIdx } = fillHandleSource;
-
-  // Auto-scroll the sheet-wrap when mouse is near the bottom edge
-  const wrapRect = wrap.getBoundingClientRect();
-  const scrollZone = 60; // px from edge to start scrolling
-  if (e.clientY > wrapRect.bottom - scrollZone) {
-    wrap.scrollTop += 8;
-  } else if (e.clientY < wrapRect.top + scrollZone && e.clientY > wrapRect.top) {
-    wrap.scrollTop -= 8;
-  }
-
-  // Highlight rows: use index-based approach so scrolled-off rows still get highlighted
-  // Find which row index the mouse is currently over
-  let hoverIdx = sourceRowIdx; // default to source if mouse hasn't moved past it
-  rows.forEach((r, i) => {
-    if (i <= sourceRowIdx) return;
-    const rect = r.getBoundingClientRect();
-    if (e.clientY > rect.top) hoverIdx = i;
-  });
-
-  // Highlight all rows from source+1 to hoverIdx
-  rows.forEach((r, i) => {
-    r.classList.toggle('fill-highlight', i > sourceRowIdx && i <= hoverIdx);
-  });
+  // No longer used — mouseenter handles highlighting
 }
 
 function onFillHandleEnd(e) {
-  document.removeEventListener('mousemove', onFillHandleMove);
-  document.removeEventListener('mouseup',   onFillHandleEnd);
+  document.removeEventListener('mouseup', onFillHandleEnd);
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   fillHandleActive = false;
@@ -1440,6 +1421,9 @@ function onFillHandleEnd(e) {
   const tbody = document.getElementById('sheet-body');
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
   const { sourceRowIdx } = fillHandleSource;
+
+  // Remove mouseenter listeners
+  rows.forEach(r => { if (r._fillEnter) { r.removeEventListener('mouseenter', r._fillEnter); delete r._fillEnter; } });
 
   const targets = rows.filter((r, i) => i > sourceRowIdx && r.classList.contains('fill-highlight'));
   rows.forEach(r => r.classList.remove('fill-highlight'));
