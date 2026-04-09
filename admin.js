@@ -1444,14 +1444,12 @@ function onFillHandleMove(e) {
 
   // Highlight only the specific column cell in each target row
   allRows.forEach((r, i) => {
+    const inRange = i > sourceRowIdx && i <= endIdx;
+    r.classList.toggle('fill-highlight', inRange);
+    // Also highlight specific column cell for visual clarity
     const td = colIdx != null ? r.children[colIdx] : null;
-    if (i > sourceRowIdx && i <= endIdx) {
-      if (td) td.classList.add('fill-highlight-cell');
-      r.classList.remove('fill-highlight');
-    } else {
-      if (td) td.classList.remove('fill-highlight-cell');
-      r.classList.remove('fill-highlight');
-    }
+    if (td) td.classList.toggle('fill-highlight-cell', inRange);
+    else [...r.children].forEach(c => c.classList.remove('fill-highlight-cell'));
   });
 
   // Auto-scroll sheet-wrap
@@ -1474,27 +1472,26 @@ function onFillHandleEnd(e) {
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
   const { sourceRowIdx } = fillHandleSource;
 
-  // Collect targets from fill-highlight-cell class (column-specific)
-  const { field: fillField } = fillHandleSource;
-  const colIdx2 = COL_MAP[fillField];
+  // Collect all highlighted target rows (both fill-highlight and fill-highlight-cell)
   const targets = rows.filter((r, i) => {
-    const td = colIdx2 != null ? r.children[colIdx2] : null;
-    return i > sourceRowIdx && td && td.classList.contains('fill-highlight-cell');
+    if (i <= sourceRowIdx) return false;
+    if (r.classList.contains('fill-highlight')) return true;
+    // Check any cell in row has fill-highlight-cell
+    return [...r.children].some(td => td.classList.contains('fill-highlight-cell'));
   });
   rows.forEach(r => {
     r.classList.remove('fill-highlight');
-    const td = colIdx2 != null ? r.children[colIdx2] : null;
-    if (td) td.classList.remove('fill-highlight-cell');
+    [...r.children].forEach(td => td.classList.remove('fill-highlight-cell'));
   });
 
   if (!targets.length) { fillHandleSource = null; return; }
 
-  const { field, value } = fillHandleSource;
+  const { field, value, isRangeFill } = fillHandleSource;
   fillHandleSource = null;
 
   // Apply fill — handle both single-cell and range fills
   const doFill = async () => {
-    if (fillHandleSource.isRangeFill && rangeSelection.length > 1) {
+    if (isRangeFill && rangeSelection.length > 1) {
       // Range fill: get unique rows and fields from selection
       const selRowIds   = [...new Set(rangeSelection.map(c => c.lineId))];
       const selFields   = [...new Set(rangeSelection.map(c => c.field))];
