@@ -481,17 +481,24 @@ tr.date-row.drag-target td {
 .fill-handle {
   display: none;
   position: absolute;
-  right: 1px;
-  bottom: 1px;
-  width: 8px;
-  height: 8px;
+  right: 0px;
+  bottom: 0px;
+  width: 10px;
+  height: 10px;
   background: #1a73e8;
-  border: 1px solid #fff;
+  border: 2px solid #fff;
   cursor: crosshair;
-  z-index: 4;
+  z-index: 20;
+  border-radius: 1px;
 }
 td:hover .fill-handle,
 td.cell-active .fill-handle { display: block; }
+/* Make the hit area bigger */
+.fill-handle::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
 
 /* Rows highlighted during fill drag */
 tr.fill-highlight td { background: #e8f0fe !important; }
