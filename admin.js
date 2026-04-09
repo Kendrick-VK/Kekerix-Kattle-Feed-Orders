@@ -141,6 +141,7 @@ async function init() {
     if (!handle) return;
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation(); // prevent saveActiveCell from firing
     const td = handle.closest('td');
     const tr = handle.closest('tr');
     if (!td || !tr) return;
@@ -1422,22 +1423,28 @@ function onFillHandleEnd(e) {
   const { field, value } = fillHandleSource;
   fillHandleSource = null;
 
-  // Apply value to each target row
-  targets.forEach(async tr => {
+  // Apply value to each target row — auto-increment load numbers
+  const doFill = async () => { for (let i = 0; i < targets.length; i++) {
+    const tr = targets[i];
     const lid = tr.dataset.id;
     const line = allLines.find(l => String(l.id) === String(lid));
-    if (!line) return;
+    if (!line) continue;
     const oldVal = line[field];
-    line[field] = value;
-    // Save to Supabase
-    if (String(oldVal) !== String(value)) {
-      if (line._isNew) {
-        // Will be saved on next real commit
-      } else {
+
+    let fillVal = value;
+    // Auto-increment load_number
+    if (field === 'load_number' && value) {
+      fillVal = incrementLoadNumber(value, i + 1);
+    }
+
+    line[field] = fillVal;
+
+    if (String(oldVal) !== String(fillVal)) {
+      if (!line._isNew) {
         try {
           await sb('order_lines?id=eq.' + lid, {
             method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ [field]: value })
+            body: JSON.stringify({ [field]: fillVal })
           });
         } catch(err) { console.error('Fill save error:', err); }
       }
@@ -1446,7 +1453,15 @@ function onFillHandleEnd(e) {
     const colIdx = COL_MAP[field];
     const td = tr.children[colIdx];
     if (td) restoreCell(td, line, field);
-  });
+  } }; doFill();
+}
+
+function incrementLoadNumber(base, steps) {
+  const match = base.match(/^(.*?)(\d+)([^0-9]*)$/);
+  if (!match) return base;
+  const prefix = match[1], numStr = match[2], suffix = match[3];
+  const num = parseInt(numStr), pad = numStr.length;
+  return prefix + String(num + steps).padStart(pad, '0') + suffix;
 }
 
 // ── Drag rows to a date header ────────────────────────
@@ -1526,11 +1541,35 @@ function handleKeyboard(e) {
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
     e.preventDefault();
-    cutSelectedRows();
+    if (activeCell) {
+      // Cut cell value — copy to clipboard and clear the cell
+      const val = activeCell.input.value;
+      navigator.clipboard.writeText(val).catch(()=>{});
+      activeCell.input.value = '';
+      activeCell.input.select();
+    } else {
+      cutSelectedRows();
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if (activeCell) {
+      // Copy cell value to clipboard
+      navigator.clipboard.writeText(activeCell.input.value).catch(()=>{});
+    }
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
     e.preventDefault();
-    if (cutIds.size) openPasteModal();
+    if (activeCell) {
+      // Paste into active cell from clipboard
+      navigator.clipboard.readText().then(text => {
+        if (activeCell) {
+          activeCell.input.value = text.trim();
+          activeCell.input.select();
+        }
+      }).catch(()=>{});
+    } else if (cutIds.size) {
+      openPasteModal();
+    }
   }
   if (e.key === 'Escape') {
     if (activeCell) { cancelEdit(); return; }
