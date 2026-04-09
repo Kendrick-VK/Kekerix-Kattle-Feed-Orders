@@ -37,9 +37,14 @@ let importedRows  = [];
 let dragFillStart = null;
 
 // Fill handle (drag cell value down)
-let fillHandleSource = null;  // { lineId, field, value, sourceRowIdx }
+let fillHandleSource = null;
 let fillHandleActive = false;
 let fillCurrentEndIdx = -1;
+
+// Range selection (click + shift-click or click-drag across cells)
+let rangeAnchor    = null;  // { lineId, field } — start of range
+let rangeSelection = [];    // [{ lineId, field }] — all selected cells
+let rangeMousedown = false;
 
 // Multi-select & undo
 let selectedIds   = new Set();
@@ -128,7 +133,12 @@ async function init() {
   // Commit active cell when clicking anywhere outside it
   document.addEventListener('mousedown', e => {
     if (!activeCell) return;
-    if (!activeCell.td.contains(e.target)) saveActiveCell();
+    if (!activeCell.td.contains(e.target)) {
+      saveActiveCell();
+      clearColHighlight();
+      const box = document.getElementById('cell-ref-box');
+      if (box) box.textContent = '';
+    }
   });
 
   // Event delegation for delete buttons — works even after partial cell restores
@@ -137,7 +147,7 @@ async function init() {
     if (btn) { e.stopPropagation(); deleteSingleRow(btn.dataset.lid); }
   });
 
-  // Fill handle — use mousedown + mouseenter on rows (like Google Sheets)
+  // Fill handle — mousedown starts drag, mousemove tracks position
   document.getElementById('sheet-body').addEventListener('mousedown', e => {
     const handle = e.target.closest('.fill-handle');
     if (!handle) return;
@@ -151,22 +161,18 @@ async function init() {
     const fieldName = td.dataset.field;
     if (!lid || !fieldName) return;
     const line = allLines.find(l => String(l.id) === String(lid));
-    if (!line) return;
+    const srcValue = line ? line[fieldName] : null;
     const allRows = [...document.getElementById('sheet-body').querySelectorAll('tr[data-id]')];
     const sourceRowIdx = allRows.findIndex(r => r.dataset.id === String(lid));
-    fillHandleSource = { lineId: lid, field: fieldName, value: line[fieldName], sourceRowIdx };
+    if (sourceRowIdx < 0) return;
+
+    // If we have a range selection, use it as the fill source pattern
+    const isRangeFill = rangeSelection.length > 1;
+    fillHandleSource = { lineId: lid, field: fieldName, value: srcValue, sourceRowIdx, isRangeFill };
     fillHandleActive = true;
     fillCurrentEndIdx = sourceRowIdx;
     document.body.style.userSelect = 'none';
-    // Wire mouseenter on EVERY row below source (including blank rows)
-    allRows.forEach((r, i) => {
-      if (i <= sourceRowIdx) return;
-      r._fillEnter = () => {
-        fillCurrentEndIdx = i;
-        allRows.forEach((rr, ii) => rr.classList.toggle('fill-highlight', ii > sourceRowIdx && ii <= fillCurrentEndIdx));
-      };
-      r.addEventListener('mouseenter', r._fillEnter);
-    });
+    document.addEventListener('mousemove', onFillHandleMove);
     document.addEventListener('mouseup', onFillHandleEnd);
   });
   // Backdrop click closes whichever modal is open
@@ -476,15 +482,15 @@ function renderSheet() {
               ondragstart="rowDragStart(event,'${lid}')"
               style="cursor:grab">${rowNum}</td>
           <td class="col-check"><input type="checkbox" ${checked} onchange="onRowCheckChange('${lid}',this.checked)" /></td>
-          <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes')">${noteVal||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product')">${l.product||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="load_number"><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number')">${l.load_number||'—'}</div></td>
-          <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name')" style="gap:0">${farmer||'—'}${farmerTag}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant')">${l.plant||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler')" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons')">${tons!==''?tons:'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup')">${markup!==''?('$'+markup):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
-          <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td class="col-notes-td" data-field="notes"><div class="cell-view${!noteVal?' empty':''}" onclick="startEdit('${lid}','notes',event.shiftKey)">${noteVal||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="product"><div class="cell-view${!l.product?' empty':''}" onclick="startEdit('${lid}','product',event.shiftKey)">${l.product||''}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="load_number"><div class="cell-view${!l.load_number?' empty':''}" onclick="startEdit('${lid}','load_number',event.shiftKey)">${l.load_number||'—'}</div></td>
+          <td data-field="customer_name"><div class="cell-view${!farmer?' empty':''}" onclick="startEdit('${lid}','customer_name',event.shiftKey)" style="gap:0">${farmer||'—'}${farmerTag}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="plant"><div class="cell-view${!l.plant?' empty':''}" onclick="startEdit('${lid}','plant',event.shiftKey)">${l.plant||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="hauler"><div class="cell-view${!hasTrucker?' empty':''}" onclick="startEdit('${lid}','hauler',event.shiftKey)" style="${hasTrucker?'color:#e37400;font-weight:500':''}">${l.hauler||'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="tons"><div class="cell-view${tons===''?' empty':''}" onclick="startEdit('${lid}','tons',event.shiftKey)">${tons!==''?tons:'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="markup"><div class="cell-view${markup===''?' empty':''}" onclick="startEdit('${lid}','markup',event.shiftKey)">${markup!==''?('$'+markup):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
+          <td data-field="commission"><div class="${commClass}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission',event.shiftKey)">${commission!==''?('$'+commission):'—'}</div><span class="fill-handle" title="Drag to fill down"></span></td>
           <td><button class="del-row-btn" data-lid="${lid}" title="Delete">×</button></td>
         </tr>`;
       rowNum++;
@@ -683,7 +689,7 @@ function restoreCell(td, line, field) {
   const commission = line.commission != null ? line.commission : '';
 
   if (field === 'commission') {
-    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission')">${commission!==''?('$'+commission):'—'}</div>`;
+    td.innerHTML = `<div class="cell-commission${commission===''?' empty':''}" style="padding:0 6px;height:22px;display:flex;align-items:center;font-size:12px;cursor:cell" onclick="startEdit('${lid}','commission',event.shiftKey)">${commission!==''?('$'+commission):'—'}</div>`;
     return;
   }
   const val = line[field];
@@ -729,8 +735,19 @@ function selectCell(lineId, field) {
 }
 
 // Open a cell for editing (puts input inside td)
-function startEdit(lineId, field) {
+function startEdit(lineId, field, shiftKey) {
   if (activeCell && String(activeCell.lineId) === String(lineId) && activeCell.field === field) return;
+
+  // Shift+click: extend range selection instead of opening edit
+  if (shiftKey && rangeAnchor) {
+    buildRange(rangeAnchor.lineId, rangeAnchor.field, lineId, field);
+    renderRangeHighlight();
+    return;
+  }
+  // Normal click: clear range, set anchor
+  rangeAnchor = { lineId: String(lineId), field };
+  rangeSelection = [{ lineId: String(lineId), field }];
+  clearRangeHighlight();
 
   // If there's an active cell, save it async but don't wait — just restore its display immediately
   if (activeCell) {
@@ -793,6 +810,7 @@ function startEdit(lineId, field) {
   const td = getLineTd(lineId, field);
   if (!td) return;
   activeTd = td;
+  updateCellRef(lineId, field);
 
   const line = allLines.find(l => String(l.id) === String(lineId));
   if (!line) return;
@@ -1409,12 +1427,45 @@ async function deleteCustomer(id) {
 
 // ── Fill handle (drag value down) ─────────────────────
 function onFillHandleMove(e) {
-  // No longer used — mouseenter handles highlighting
+  if (!fillHandleSource || !fillHandleActive) return;
+  const tbody = document.getElementById('sheet-body');
+  const allRows = [...tbody.querySelectorAll('tr[data-id]')];
+  const { sourceRowIdx, field } = fillHandleSource;
+  const colIdx = COL_MAP[field];
+
+  // Find the last row whose top edge is above the mouse
+  let endIdx = sourceRowIdx;
+  for (let i = sourceRowIdx + 1; i < allRows.length; i++) {
+    const rect = allRows[i].getBoundingClientRect();
+    if (rect.top <= e.clientY) endIdx = i;
+    else break;
+  }
+  fillCurrentEndIdx = endIdx;
+
+  // Highlight only the specific column cell in each target row
+  allRows.forEach((r, i) => {
+    const td = colIdx != null ? r.children[colIdx] : null;
+    if (i > sourceRowIdx && i <= endIdx) {
+      if (td) td.classList.add('fill-highlight-cell');
+      r.classList.remove('fill-highlight');
+    } else {
+      if (td) td.classList.remove('fill-highlight-cell');
+      r.classList.remove('fill-highlight');
+    }
+  });
+
+  // Auto-scroll sheet-wrap
+  const wrap = tbody.closest('.sheet-wrap');
+  if (wrap) {
+    const rect = wrap.getBoundingClientRect();
+    if (e.clientY > rect.bottom - 40) wrap.scrollTop += 15;
+    else if (e.clientY < rect.top + 40) wrap.scrollTop -= 15;
+  }
 }
 
 function onFillHandleEnd(e) {
+  document.removeEventListener('mousemove', onFillHandleMove);
   document.removeEventListener('mouseup', onFillHandleEnd);
-  document.body.style.cursor = '';
   document.body.style.userSelect = '';
   fillHandleActive = false;
   if (!fillHandleSource) return;
@@ -1423,64 +1474,99 @@ function onFillHandleEnd(e) {
   const rows = [...tbody.querySelectorAll('tr[data-id]')];
   const { sourceRowIdx } = fillHandleSource;
 
-  // Remove mouseenter listeners
-  rows.forEach(r => { if (r._fillEnter) { r.removeEventListener('mouseenter', r._fillEnter); delete r._fillEnter; } });
-
-  const targets = rows.filter((r, i) => i > sourceRowIdx && r.classList.contains('fill-highlight'));
-  rows.forEach(r => r.classList.remove('fill-highlight'));
+  // Collect targets from fill-highlight-cell class (column-specific)
+  const { field: fillField } = fillHandleSource;
+  const colIdx2 = COL_MAP[fillField];
+  const targets = rows.filter((r, i) => {
+    const td = colIdx2 != null ? r.children[colIdx2] : null;
+    return i > sourceRowIdx && td && td.classList.contains('fill-highlight-cell');
+  });
+  rows.forEach(r => {
+    r.classList.remove('fill-highlight');
+    const td = colIdx2 != null ? r.children[colIdx2] : null;
+    if (td) td.classList.remove('fill-highlight-cell');
+  });
 
   if (!targets.length) { fillHandleSource = null; return; }
 
   const { field, value } = fillHandleSource;
   fillHandleSource = null;
 
-  // Apply value to each target row — auto-increment load numbers
+  // Apply fill — handle both single-cell and range fills
   const doFill = async () => {
-    for (let i = 0; i < targets.length; i++) {
-      const tr = targets[i];
-      const lid = tr.dataset.id;
-      const isBlank = tr.dataset.blank === '1';
-      const dateForRow = tr.dataset.date;
+    if (fillHandleSource.isRangeFill && rangeSelection.length > 1) {
+      // Range fill: get unique rows and fields from selection
+      const selRowIds   = [...new Set(rangeSelection.map(c => c.lineId))];
+      const selFields   = [...new Set(rangeSelection.map(c => c.field))];
+      const numSelRows  = selRowIds.length;
 
-      let fillVal = value;
-      if (field === 'load_number' && value) {
-        fillVal = incrementLoadNumber(value, i + 1);
-      }
+      for (let i = 0; i < targets.length; i++) {
+        const tr = targets[i];
+        const lid = tr.dataset.id;
+        const isBlank = tr.dataset.blank === '1';
+        const dateForRow = tr.dataset.date;
+        const srcRowIdx = i % numSelRows; // repeat pattern
+        const srcLineId = selRowIds[srcRowIdx];
 
-      if (isBlank) {
-        // Create a real row for this blank slot then fill it
-        try {
-          const insertPayload = {
-            delivery_date: dateForRow,
-            [field]: fillVal,
-            loads_on_date: 1, total_loads: 1, status: 'Scheduled'
-          };
-          const result = await sb('order_lines', { method: 'POST', body: JSON.stringify(insertPayload) });
-          const saved = Array.isArray(result) ? result[0] : result;
-          if (saved && saved.id) {
-            allLines.push({ ...saved });
+        for (const f of selFields) {
+          const srcLine = allLines.find(l => String(l.id) === String(srcLineId));
+          let fillVal = srcLine ? srcLine[f] : null;
+          if (f === 'load_number' && fillVal) {
+            fillVal = incrementLoadNumber(fillVal, Math.floor(i / numSelRows) + 1);
           }
-        } catch(err) { console.error('Fill blank row error:', err); }
-      } else {
-        const line = allLines.find(l => String(l.id) === String(lid));
-        if (!line) continue;
-        const oldVal = line[field];
-        line[field] = fillVal;
-        if (String(oldVal) !== String(fillVal) && !line._isNew) {
-          try {
+          if (isBlank) {
+            // skip for now — single cell fill handles blank row creation
+          } else {
+            const line = allLines.find(l => String(l.id) === String(lid));
+            if (!line || line._isNew) continue;
+            line[f] = fillVal;
             await sb('order_lines?id=eq.' + lid, {
-              method: 'PATCH', headers: { 'Prefer': 'return=minimal' },
-              body: JSON.stringify({ [field]: fillVal })
-            });
-          } catch(err) { console.error('Fill save error:', err); }
+              method:'PATCH', headers:{'Prefer':'return=minimal'},
+              body: JSON.stringify({ [f]: fillVal })
+            }).catch(e => console.error('range fill error:', e));
+            const td = getLineTd(lid, f);
+            if (td) restoreCell(td, line, f);
+          }
         }
-        // Update cell display immediately
-        const colIdx = COL_MAP[field];
-        const td = tr.children[colIdx];
-        if (td) { const line2 = allLines.find(l=>String(l.id)===String(lid)); if(line2) restoreCell(td, line2, field); }
+      }
+    } else {
+      // Single cell fill
+      for (let i = 0; i < targets.length; i++) {
+        const tr = targets[i];
+        const lid = tr.dataset.id;
+        const isBlank = tr.dataset.blank === '1';
+        const dateForRow = tr.dataset.date;
+
+        let fillVal = value;
+        if (field === 'load_number' && value) fillVal = incrementLoadNumber(value, i + 1);
+
+        if (isBlank) {
+          try {
+            const insertPayload = {
+              delivery_date: dateForRow, [field]: fillVal,
+              loads_on_date: 1, total_loads: 1, status: 'Scheduled'
+            };
+            const result = await sb('order_lines', { method:'POST', body:JSON.stringify(insertPayload) });
+            const saved = Array.isArray(result) ? result[0] : result;
+            if (saved && saved.id) allLines.push({ ...saved });
+          } catch(err) { console.error('Fill blank row error:', err); }
+        } else {
+          const line = allLines.find(l => String(l.id) === String(lid));
+          if (!line) continue;
+          const oldVal = line[field];
+          line[field] = fillVal;
+          if (String(oldVal) !== String(fillVal) && !line._isNew) {
+            await sb('order_lines?id=eq.' + lid, {
+              method:'PATCH', headers:{'Prefer':'return=minimal'},
+              body: JSON.stringify({ [field]: fillVal })
+            }).catch(err => console.error('Fill save error:', err));
+          }
+          const td2 = getLineTd(lid, field);
+          if (td2) { const l2 = allLines.find(l=>String(l.id)===String(lid)); if(l2) restoreCell(td2, l2, field); }
+        }
       }
     }
-    // Re-render to show newly created rows
+    clearRangeHighlight();
     applyFilters();
   }; doFill();
 }
@@ -1849,7 +1935,78 @@ async function deletePlant(id) {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
+
+// ── Range selection helpers ───────────────────────────
+function buildRange(fromLineId, fromField, toLineId, toField) {
+  const fromRowIdx  = filteredLines.findIndex(l => String(l.id) === String(fromLineId));
+  const toRowIdx    = filteredLines.findIndex(l => String(l.id) === String(toLineId));
+  const fromColIdx  = FIELD_ORDER.indexOf(fromField);
+  const toColIdx    = FIELD_ORDER.indexOf(toField);
+  if (fromRowIdx < 0 || toRowIdx < 0 || fromColIdx < 0 || toColIdx < 0) return;
+
+  const minRow = Math.min(fromRowIdx, toRowIdx);
+  const maxRow = Math.max(fromRowIdx, toRowIdx);
+  const minCol = Math.min(fromColIdx, toColIdx);
+  const maxCol = Math.max(fromColIdx, toColIdx);
+
+  rangeSelection = [];
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      rangeSelection.push({ lineId: String(filteredLines[r].id), field: FIELD_ORDER[c] });
+    }
+  }
+}
+
+function renderRangeHighlight() {
+  // Clear all existing range highlights
+  document.querySelectorAll('td.range-selected').forEach(td => td.classList.remove('range-selected'));
+  rangeSelection.forEach(({ lineId, field }) => {
+    const td = getLineTd(lineId, field);
+    if (td) td.classList.add('range-selected');
+  });
+  // Show fill handle on the bottom-right cell of the range
+  document.querySelectorAll('.range-fill-handle').forEach(el => el.classList.remove('range-fill-handle'));
+  if (rangeSelection.length > 0) {
+    const last = rangeSelection[rangeSelection.length - 1];
+    const td = getLineTd(last.lineId, last.field);
+    if (td) td.classList.add('range-fill-handle');
+  }
+}
+
+function clearRangeHighlight() {
+  document.querySelectorAll('td.range-selected').forEach(td => td.classList.remove('range-selected'));
+  document.querySelectorAll('.range-fill-handle').forEach(el => el.classList.remove('range-fill-handle'));
+  rangeSelection = [];
+  rangeAnchor = null;
+}
+
 // ── Helpers ───────────────────────────────────────────
+const COL_LETTERS = { notes:'A', product:'B', load_number:'C', customer_name:'D', plant:'E', hauler:'F', tons:'G', markup:'H', commission:'I' };
+
+function updateCellRef(lineId, field) {
+  const box = document.getElementById('cell-ref-box');
+  if (!box) return;
+  if (!lineId || !field) { box.textContent = ''; clearColHighlight(); return; }
+
+  // Row number — find position in filteredLines
+  const rowNum = filteredLines.findIndex(l => String(l.id) === String(lineId));
+  const letter = COL_LETTERS[field] || '';
+  box.textContent = rowNum >= 0 ? letter + (rowNum + 1) : letter;
+
+  // Highlight the column letter in the header
+  clearColHighlight();
+  const letterRow = document.querySelector('tr.col-letter-row');
+  if (!letterRow) return;
+  const colIdx = COL_MAP[field];
+  if (colIdx != null && letterRow.children[colIdx]) {
+    letterRow.children[colIdx].classList.add('col-active');
+  }
+}
+
+function clearColHighlight() {
+  document.querySelectorAll('tr.col-letter-row th.col-active').forEach(th => th.classList.remove('col-active'));
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr+'T00:00:00');
